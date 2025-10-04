@@ -1,8 +1,8 @@
 # Reaction
 
-{{[Reaction](https://zh.wikipedia.org/wiki/Template:Reaction)}} 模板配套小工具，可以快速添加反應表情。
-
 專案頁面：[Reaction](https://zh.wikipedia.org/wiki/User:SuperGrey/gadgets/Reaction)
+
+{{[Reaction](https://zh.wikipedia.org/wiki/Template:Reaction)}} 模板配套小工具，可以快速添加反應表情。
 
 ## 使用方式
 
