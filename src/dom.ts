@@ -3,7 +3,6 @@ import {atChineseUtcRegex, getCurrentChineseUtc, parseTimestamp, userNameAtChine
 import {modifyPage} from "./api";
 
 declare var mw: any;
-declare var OO: any;
 declare var window: any;
 
 
