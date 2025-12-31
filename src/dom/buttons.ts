@@ -1,5 +1,5 @@
 import state from "../state";
-import { getCurrentChineseUtc, parseTimestamp } from "../utils";
+import { getCurrentSignatureTimestamp, parseTimestamp } from "../utils";
 import { modifyPage, type ModifyPageRequest } from "../api/modifyPage";
 import { t, tReaction } from "../i18n";
 import {
@@ -185,7 +185,7 @@ function toggleReaction(button: HTMLElement) {
 			counter.innerText = newCount.toString();
 
 			const commentEntries = getReactionCommentors(button);
-			commentEntries.push({ user: state.userName ?? "", timestamp: getCurrentChineseUtc() });
+			commentEntries.push({ user: state.userName ?? "", timestamp: getCurrentSignatureTimestamp() });
 			setReactionCommentors(button, commentEntries);
 		});
 	}
@@ -267,7 +267,7 @@ function saveNewReaction(button: HTMLElement, event: MouseEvent | false) {
 			const { icon, counter } = parts;
 			icon.textContent = input.value;
 			counter.textContent = "1";
-			const entry = { user: state.userName ?? "", timestamp: getCurrentChineseUtc() };
+			const entry = { user: state.userName ?? "", timestamp: getCurrentSignatureTimestamp() };
 			setReactionCommentors(button, [entry]);
 
 			// Remove event handlers using the stored bound function reference.

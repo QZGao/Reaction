@@ -1,5 +1,5 @@
 import state from "../state";
-import { escapeRegex, getCurrentChineseUtc } from "../utils";
+import { escapeRegex, getCurrentSignatureTimestamp } from "../utils";
 import { t, tReaction } from "../i18n";
 import { retrieveFullText, saveFullText } from "./client";
 import { addReactionToLine, appendReactionTemplate, removeReactionFromLine } from "../wikitext/reactionTemplates";
@@ -61,13 +61,13 @@ export async function modifyPage(mod: ModifyPageRequest): Promise<boolean> {
 				summary = "− " + mod.downvote;
 			}
 		} else if (mod.upvote) {
-			const result = addReactionToLine(timestamp2LineEnd, mod.upvote, state.userName, getCurrentChineseUtc());
+			const result = addReactionToLine(timestamp2LineEnd, mod.upvote, state.userName, getCurrentSignatureTimestamp());
 			timestamp2LineEnd = result.text;
 			if (result.modified) {
 				summary = "+ " + mod.upvote;
 			}
 		} else if (mod.append) {
-			const result = appendReactionTemplate(timestamp2LineEnd, mod.append, state.userName, getCurrentChineseUtc());
+			const result = appendReactionTemplate(timestamp2LineEnd, mod.append, state.userName, getCurrentSignatureTimestamp());
 			if (!result.modified) {
 				console.log("[Reaction] Reaction of " + mod.append + " already exists in: " + timestamp2LineEnd);
 				throw new Error(tReaction("api.errors.reaction_exists"));

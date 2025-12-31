@@ -4,7 +4,7 @@ type MessageMap = Record<string, string>;
 
 const INVISIBLE_MARK_PATTERN = "[\\u200E\\u200F]?";
 
-const DEFAULT_MESSAGES: MessageMap = {
+export const DEFAULT_MESSAGES: MessageMap = {
 	// Month names
 	january: "January",
 	february: "February",
@@ -62,18 +62,39 @@ const DEFAULT_MESSAGES: MessageMap = {
 	saturday: "Saturday",
 };
 
+/**
+ * Escape special regex characters in a string.
+ * @param text - Raw string.
+ * @returns Escaped string.
+ */
 function escapeRegexLiteral(text: string): string {
 	return text.replace(/[\\^$.*+?()[\]{}|\-]/g, "\\$&");
 }
 
+/**
+ * Get messages for the given keys, applying overrides if provided.
+ * @param keys - Message keys to retrieve.
+ * @param overrides - Optional message overrides.
+ * @returns Array of message strings.
+ */
 function getMessages(keys: string[], overrides?: MessageMap): string[] {
 	return keys.map((key) => overrides?.[key] ?? DEFAULT_MESSAGES[key] ?? key);
 }
 
+/**
+ * Wrap a pattern in a capturing group.
+ * @param pattern - Regex pattern.
+ * @returns Capturing group pattern.
+ */
 function regexpGroup(pattern: string): string {
 	return `(${pattern})`;
 }
 
+/**
+ * Create a regex alternation group from an array of values.
+ * @param values - Array of string values.
+ * @returns Alternation group pattern.
+ */
 function regexpAlternateGroup(values: string[]): string {
 	return regexpGroup(values.map((value) => escapeRegexLiteral(value)).join("|"));
 }
@@ -87,6 +108,12 @@ export interface TimestampRegexpOptions extends TimestampMessageOptions {
 	timezoneAbbreviations: Record<string, string>;
 }
 
+/**
+ * Generate a regex pattern string for matching timestamps in the specified format.
+ * @param format - Timestamp format string.
+ * @param options - Options for digits pattern and timezone abbreviations.
+ * @returns Regex pattern string.
+ */
 export function getTimestampRegexp(format: string, options: TimestampRegexpOptions): string {
 	const digitsPattern = options.digitsPattern ?? "\\d";
 	const tzKeys = Object.keys(options.timezoneAbbreviations);
@@ -254,6 +281,12 @@ export type TimestampParserFn = (
 	match: RegExpMatchArray | Array<string | null> | null,
 ) => ParsedTimestamp | null;
 
+/**
+ * Generate a timestamp parser function for the specified format.
+ * @param format - Timestamp format string.
+ * @param options - Options for digit transformation, time zone, and timezone abbreviations.
+ * @returns Parser function.
+ */
 export function getTimestampParser(format: string, options: TimestampParserOptions): TimestampParserFn {
 	const groupOrder: string[] = [];
 	for (let p = 0; p < format.length; p++) {
