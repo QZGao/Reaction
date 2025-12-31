@@ -1,5 +1,6 @@
 import state from "./state";
 import {addReactionButtons} from "./dom";
+import { t, tReaction } from "./i18n";
 
 /**
  * 初始化函式，載入所需的模組和事件綁定。
@@ -13,9 +14,7 @@ async function init() {
         });
     } catch (error) {
         console.error(error);
-        mw.notify(state.convByVar({
-            hant: "[Reaction] 失敗！簡繁轉換模組未能載入。", hans: "[Reaction] 失败！简繁转换模组未能载入。",
-        }), { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
+        mw.notify(tReaction("main.notifications.hanassist_failed"), { title: t("main.titles.error"), type: "error" });
     }
 }
 

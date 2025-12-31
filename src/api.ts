@@ -1,5 +1,6 @@
 import state from "./state";
 import { escapeRegex, getCurrentChineseUtc, userNameAtChineseUtcRegex } from "./utils";
+import { t, tReaction } from "./i18n";
 
 interface RevisionSlot {
     main: {
@@ -82,15 +83,13 @@ async function saveFullText(fulltext: string, summary: string): Promise<boolean>
             text: fulltext,
             summary: summary + " ([[User:SuperGrey/gadgets/Reaction|Reaction]])",
         });
-        mw.notify(state.convByVar({ hant: "[Reaction] 儲存成功！", hans: "[Reaction] 保存成功！" }), {
-            title: "成功", type: "success",
+        mw.notify(tReaction("api.notifications.save_success"), {
+            title: t("api.titles.success"), type: "success",
         });
         return true;
     } catch (error) {
         console.error(error);
-        mw.notify(state.convByVar({
-            hant: "[Reaction] 失敗！無法儲存頁面。", hans: "[Reaction] 失败！无法保存页面。",
-        }), { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
+        mw.notify(tReaction("api.notifications.save_failure"), { title: t("api.titles.error"), type: "error" });
         return false;
     }
 }
@@ -107,9 +106,7 @@ export async function modifyPage(mod: ModifyPageRequest): Promise<boolean> {
         fulltext = await retrieveFullText();
     } catch (error) {
         console.error(error);
-        mw.notify(state.convByVar({
-            hant: "[Reaction] 失敗！無法獲取頁面內容。", hans: "[Reaction] 失败！无法获取页面内容。",
-        }), { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
+        mw.notify(tReaction("api.notifications.fetch_failure"), { title: t("api.titles.error"), type: "error" });
         return false;
     }
 
@@ -122,19 +119,13 @@ export async function modifyPage(mod: ModifyPageRequest): Promise<boolean> {
         // If the timestamp is not found, throw an error
         if (!timestampMatch || timestampMatch.length === 0) {
             console.log("[Reaction] Unable to find timestamp " + mod.timestamp + " in: " + fulltext);
-            throw new Error("[Reaction] " + state.convByVar({
-                hant: "原文中找不到時間戳：", hans: "原文中找不到时间戳：",
-            }) + mod.timestamp);
+            throw new Error(tReaction("api.errors.timestamp_missing", [mod.timestamp]));
         }
 
         // Check if more than one match is found.
         if (timestampMatch.length > 1) {
             console.log("[Reaction] More than one timestamp found: " + timestampMatch.join(", "));
-            throw new Error("[Reaction] " + state.convByVar({
-                hant: "原文中找到多個相同的時間戳，小工具無法處理：", hans: "原文中找到多个相同的时间戳，小工具无法处理：",
-            }) + mod.timestamp + state.convByVar({
-                hant: "。請手動編輯。", hans: "。请手动编辑。",
-            }));
+            throw new Error(tReaction("api.errors.timestamp_conflict", [mod.timestamp]));
         }
 
         let pos = fulltext.search(timestampRegex);
@@ -179,9 +170,7 @@ export async function modifyPage(mod: ModifyPageRequest): Promise<boolean> {
             // If the reaction already exists, then error
             if (regex.test(timestamp2LineEnd)) {
                 console.log("[Reaction] Reaction of " + mod.append + " already exists in: " + timestamp2LineEnd);
-                throw new Error("[Reaction] " + state.convByVar({
-                    hant: "原文中已經有這個反應！", hans: "原文中已经有这个反应！",
-                }));
+                throw new Error(tReaction("api.errors.reaction_exists"));
             }
 
             // Add text at the end of that line
@@ -192,10 +181,7 @@ export async function modifyPage(mod: ModifyPageRequest): Promise<boolean> {
 
         if (newFulltext === fulltext) {
             console.log("[Reaction] Nothing is modified. Could be because using a template inside {{Reaction}}.");
-            throw new Error("[Reaction] " + state.convByVar({
-                hant: "原文未被修改。可能是因為使用了嵌套模板；請手動編輯。",
-                hans: "原文未被修改。可能是因为使用了嵌套模板；请手动编辑。",
-            }));
+            throw new Error(tReaction("api.errors.no_changes"));
         }
 
         // 儲存全文。錯誤資訊已在函式內處理。
@@ -204,7 +190,7 @@ export async function modifyPage(mod: ModifyPageRequest): Promise<boolean> {
     } catch (error: unknown) {
         console.error(error);
         const message = error instanceof Error ? error.message : String(error);
-        mw.notify(message, { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
+        mw.notify(message, { title: t("api.titles.error"), type: "error" });
         return false;
     }
 }

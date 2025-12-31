@@ -17,6 +17,7 @@ export type RichMessageSegment =
 
 const fallbackLocale = resolveFallbackLocale();
 let activeLocale: LocaleCode = detectInitialLocale();
+const REACTION_PREFIX = "[Reaction] ";
 
 /**
  * Access the global MediaWiki instance if available.
@@ -215,8 +216,19 @@ function normalizeLocaleCode(code?: string): string | undefined {
  * Translate a message key into the active locale, optionally applying parameters.
  */
 export function t(key: MessageKey, params?: MessageParams): string {
-	const template = resolveTemplate(key, activeLocale);
-	return format(template, params);
+    const template = resolveTemplate(key, activeLocale);
+    return format(template, params);
+}
+
+/**
+ * Translate a message key and add the standard gadget prefix.
+ * @param key - Message key.
+ * @param params - Optional replacement parameters.
+ * @returns Prefixed localized string.
+ */
+export function tReaction(key: MessageKey, params?: MessageParams): string {
+    const message = t(key, params);
+    return message.startsWith(REACTION_PREFIX) ? message : `${REACTION_PREFIX}${message}`;
 }
 
 /**

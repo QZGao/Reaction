@@ -1,6 +1,7 @@
 import state from "./state";
 import { atChineseUtcRegex, getCurrentChineseUtc, parseTimestamp, userNameAtChineseUtcRegex } from "./utils";
 import { modifyPage, type ModifyPageRequest } from "./api";
+import { t, tReaction } from "./i18n";
 
 /**
  * 事件處理函式註冊表。WeakMap用於儲存事件處理函式的引用，以便在需要時可以移除它們。
@@ -70,27 +71,16 @@ function handleReactionClick(button: HTMLElement) {
     } else {
         if (button.getAttribute("data-reaction-icon-invalid")) {
             // 如果反應圖示無效，不處理。
-            mw.notify(state.convByVar({
-                hant: "[Reaction] 反應圖示無效，小工具無法處理。", hans: "[Reaction] 反应图示无效，小工具无法处理。",
-            }), { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
+            mw.notify(tReaction("dom.notify.invalid_icon"), { title: t("dom.titles.error"), type: "error" });
             console.error("[Reaction] Invalid reaction icon.");
             return;
         }
 
         if (window?.ujsReactionConfirmedRequired) {
             // （手賤者專用）點擊普通反應按鈕時，確認是否要追加或取消反應。
-            let confirmMessage;
-            if (button.classList.contains("reaction-reacted")) {
-                confirmMessage = state.convByVar({
-                    hant: "[Reaction] 確定要取消這個反應嗎？", hans: "[Reaction] 确定要取消这个反应吗？",
-                });
-            } else {
-                confirmMessage = state.convByVar({
-                    hant: "[Reaction] 確定要追加這個反應嗎？", hans: "[Reaction] 确定要追加这个反应吗？",
-                });
-            }
+            const confirmMessage = button.classList.contains("reaction-reacted") ? tReaction("dom.confirm.remove") : tReaction("dom.confirm.add");
             OO.ui.confirm(confirmMessage, {
-                title: state.convByVar({ hant: "確認", hans: "确认" }), size: "small",
+                title: t("dom.titles.confirm"), size: "small",
             }).then((confirmed: boolean) => {
                 if (confirmed) {
                     toggleReaction(button);
@@ -115,9 +105,7 @@ function toggleReaction(button: HTMLElement) {
     const { icon, counter } = parts;
     const timestamp = getTimestampString(button);
     if (!timestamp) {
-        mw.notify(state.convByVar({
-            hant: "[Reaction] 失敗！無法獲取時間戳。", hans: "[Reaction] 失败！无法获取时间戳。",
-        }), { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
+        mw.notify(tReaction("dom.errors.missing_timestamp"), { title: t("dom.titles.error"), type: "error" });
         return;
     }
     const counterValue = button.getAttribute("data-reaction-count") ?? counter.innerText;
@@ -126,9 +114,7 @@ function toggleReaction(button: HTMLElement) {
 
     if (button.classList.contains("reaction-reacted")) {
         if (!button.getAttribute("data-reaction-commentors")?.includes(state.userName || "")) {
-            mw.notify(state.convByVar({
-                hant: "[Reaction] 失敗！不能取消並未做出的反應。", hans: "[Reaction] 失败！不能取消并未做出的反应。",
-            }), { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
+            mw.notify(tReaction("dom.errors.unowned_reaction"), { title: t("dom.titles.error"), type: "error" });
             console.log("[Reaction] Should not happen! " + state.userName + " should be in " + button.getAttribute("data-reaction-commentors"));
             return;
         }
@@ -169,9 +155,7 @@ function toggleReaction(button: HTMLElement) {
         });
     } else {
         if (state.userName && button.getAttribute("data-reaction-commentors")?.includes(state.userName)) {
-            mw.notify(state.convByVar({
-                hant: "[Reaction] 失敗！不能重複做出反應。", hans: "[Reaction] 失败！不能重复做出反应。",
-            }), { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
+            mw.notify(tReaction("dom.errors.duplicate_reaction"), { title: t("dom.titles.error"), type: "error" });
             console.log("[Reaction] Should not happen! " + state.userName + " should not be in " + button.getAttribute("data-reaction-commentors"));
             return;
         }
@@ -190,7 +174,7 @@ function toggleReaction(button: HTMLElement) {
 
             let dataCommentors = button.getAttribute("data-reaction-commentors");
             const userName = state.userName ?? "";
-            const comment = `${userName}於${getCurrentChineseUtc()}`;
+            const comment = t("dom.reactions.comment_stamp", [userName, getCurrentChineseUtc()]);
             if (dataCommentors) {
                 dataCommentors += `/${comment}`;
             } else {
@@ -204,11 +188,7 @@ function toggleReaction(button: HTMLElement) {
             } else {
                 buttonTitle = "";
             }
-            buttonTitle += userName + state.convByVar({
-                hant: "於", hans: "于",
-            }) + getCurrentChineseUtc() + state.convByVar({
-                hant: "回應了這條留言", hans: "回应了这条留言",
-            });
+            buttonTitle += t("dom.tooltips.reacted_to_comment", [userName, getCurrentChineseUtc()]);
             button.setAttribute("title", buttonTitle);
         });
     }
@@ -234,7 +214,7 @@ function cancelNewReaction(button: HTMLElement, event: MouseEvent | false) {
     }
     let buttonCounter = button.querySelector<HTMLElement>(".reaction-counter");
     if (buttonCounter) {
-        buttonCounter.innerText = state.convByVar({ hant: "反應", hans: "反应" });
+        buttonCounter.innerText = t("dom.reactions.label");
     }
 
     // Restore the original event handler
@@ -264,9 +244,7 @@ function saveNewReaction(button: HTMLElement, event: MouseEvent | false) {
         return;
     }
     if (!input.value.trim()) {
-        mw.notify(state.convByVar({
-            hant: "[Reaction] 反應內容不能為空！", hans: "[Reaction] 反应内容不能为空！",
-        }), { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
+        mw.notify(tReaction("dom.errors.input_empty"), { title: t("dom.titles.error"), type: "error" });
         return;
     }
 
@@ -274,9 +252,7 @@ function saveNewReaction(button: HTMLElement, event: MouseEvent | false) {
     let timestampElement = _buttonTimestamps.get(button);
     let timestamp = timestampElement ? parseTimestamp(timestampElement) : null;
     if (!timestamp) {
-        mw.notify(state.convByVar({
-            hant: "[Reaction] 失敗！無法獲取時間戳。", hans: "[Reaction] 失败！无法获取时间戳。",
-        }), { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
+        mw.notify(tReaction("dom.errors.missing_timestamp"), { title: t("dom.titles.error"), type: "error" });
         return;
     }
     let mod: ModifyPageRequest = {
@@ -294,11 +270,7 @@ function saveNewReaction(button: HTMLElement, event: MouseEvent | false) {
             const { icon, counter } = parts;
             icon.textContent = input.value;
             counter.textContent = "1";
-            button.setAttribute("title", state.userName + state.convByVar({
-                hant: "於", hans: "于",
-            }) + getCurrentChineseUtc() + state.convByVar({
-                hant: "回應了這條留言", hans: "回应了这条留言",
-            }));
+            button.setAttribute("title", t("dom.tooltips.reacted_to_comment", [state.userName ?? "", getCurrentChineseUtc()]));
             button.setAttribute("data-reaction-commentors", state.userName ?? "");
 
             // Remove event handlers using the stored bound function reference.
@@ -402,7 +374,7 @@ function addNewReaction(button: HTMLElement) {
     if (buttonCounter) {
         let saveButton = document.createElement("span");
         saveButton.className = "reaction-save";
-        saveButton.innerText = state.convByVar({ hant: "儲存", hans: "保存" });
+        saveButton.innerText = t("dom.actions.save");
         if (_handlerRegistry.has(saveButton)) {
             return;
         }
@@ -412,7 +384,7 @@ function addNewReaction(button: HTMLElement) {
 
         let cancelButton = document.createElement("span");
         cancelButton.className = "reaction-cancel";
-        cancelButton.innerText = state.convByVar({ hant: "取消", hans: "取消" });
+        cancelButton.innerText = t("dom.actions.cancel");
         if (_handlerRegistry.has(cancelButton)) {
             return;
         }
@@ -447,7 +419,7 @@ function NewReactionButton() {
     buttonCounterContainer.className = "reaction-counter-container";
     let buttonCounter = document.createElement("span");
     buttonCounter.className = "reaction-counter";
-    buttonCounter.innerText = state.convByVar({ hant: "反應", hans: "反应" });
+    buttonCounter.innerText = t("dom.reactions.label");
     buttonCounterContainer.appendChild(buttonCounter);
     buttonContent.appendChild(buttonIconContainer);
     buttonContent.appendChild(buttonCounterContainer);
