@@ -467,6 +467,9 @@ function processReactionRoot(root: ReactionRoot): number {
 	for (let i = 0; i < pairCount; i++) {
 		const timestamp = timestamps[i];
 		const replyButton = replyButtons[i];
+		if (isInPreview(timestamp) || isInPreview(replyButton)) {
+			continue;
+		}
 		let button = timestamp.nextElementSibling as HTMLElement | null;
 		while (button && button !== replyButton) {
 			if (button.classList.contains("template-reaction") && button.hasAttribute("data-reaction-commentors")) {
@@ -481,6 +484,9 @@ function processReactionRoot(root: ReactionRoot): number {
 	for (let i = 0; i < pairCount; i++) {
 		const replyButton = replyButtons[i];
 		const timestamp = timestamps[i] ?? null;
+		if (isInPreview(replyButton) || isInPreview(timestamp)) {
+			continue;
+		}
 		if (replyButton instanceof HTMLElement && insertNewReactionBefore(replyButton, timestamp)) {
 			insertedButtons++;
 		}
@@ -495,6 +501,22 @@ const TIMESTAMP_SELECTOR = [
 	"a.cd-comment-button-label.cd-comment-button",
 	"a[data-mw-comment-timestamp]",
 ].join(", ");
+
+const PREVIEW_EXCLUDE_SELECTOR = [
+	".preview",
+	".cd-commentForm-previewArea",
+	".ext-discussiontools-ui-replyWidget-preview",
+	'[data-label="Preview"]',
+].join(", ");
+
+/**
+ * Check if an element is inside a preview area.
+ * @param element {Element | null | undefined} - Element to check.
+ * @returns {boolean} - True if inside a preview area, false otherwise.
+ */
+function isInPreview(element: Element | null | undefined): boolean {
+	return Boolean(element?.closest(PREVIEW_EXCLUDE_SELECTOR));
+}
 
 /**
  * Resolve the timestamp element associated with a node.
@@ -542,6 +564,9 @@ function insertNewReactionBefore(target: HTMLElement, timestamp?: HTMLElement | 
 	if (!target.parentNode) {
 		return false;
 	}
+	if (isInPreview(target)) {
+		return false;
+	}
 	const previousSibling = target.previousElementSibling as HTMLElement | null;
 	if (previousSibling?.classList.contains("reaction-new")) {
 		return false;
@@ -570,6 +595,9 @@ function processConvenientDiscussionMenus(root: ReactionRoot): number {
 	);
 	let inserted = 0;
 	for (const comment of commentParts) {
+		if (isInPreview(comment)) {
+			continue;
+		}
 		const menuWrapper = comment.querySelector<HTMLElement>(".cd-comment-menu-wrapper");
 		if (!menuWrapper) {
 			continue;
@@ -606,6 +634,9 @@ export function addReactionButtons(containers?: ReactionRoot | ReactionRoot[] | 
 		const reactionButtons = Array.from(root.querySelectorAll(".template-reaction[data-reaction-commentors]"));
 		for (const element of reactionButtons) {
 			if (!(element instanceof HTMLElement)) {
+				continue;
+			}
+			if (isInPreview(element)) {
 				continue;
 			}
 			if (!_buttonTimestamps.has(element)) {
