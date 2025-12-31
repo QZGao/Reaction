@@ -213,9 +213,27 @@ export function parseReactionTemplateText(templateText: string): ReactionTemplat
 		}
 	});
 
-	const indexes = Array.from(new Set([...Object.keys(userMap), ...Object.keys(timestampMap)].map(Number))).sort(
-		(a, b) => a - b
-	);
+	if (legacyEntries.length > 0) {
+		const usedIndexes = new Set<number>(Object.keys(userMap).map(Number));
+		let nextIndex = 1;
+		legacyEntries.forEach((legacy) => {
+			const parsed = parseLegacyParticipant(legacy);
+			if (!parsed.user) {
+				return;
+			}
+			while (usedIndexes.has(nextIndex)) {
+				nextIndex++;
+			}
+			userMap[nextIndex] = parsed.user;
+			if (parsed.timestamp && timestampMap[nextIndex] == null) {
+				timestampMap[nextIndex] = parsed.timestamp;
+			}
+			usedIndexes.add(nextIndex);
+			nextIndex++;
+		});
+	}
+
+	const indexes = Array.from(new Set([...Object.keys(userMap), ...Object.keys(timestampMap)].map(Number))).sort((a, b) => a - b);
 	indexes.forEach((index) => {
 		const user = userMap[index];
 		if (user) {
@@ -223,12 +241,6 @@ export function parseReactionTemplateText(templateText: string): ReactionTemplat
 				user,
 				timestamp: timestampMap[index],
 			});
-		}
-	});
-	legacyEntries.forEach((legacy) => {
-		const parsed = parseLegacyParticipant(legacy);
-		if (parsed.user) {
-			participants.push(parsed);
 		}
 	});
 
@@ -241,19 +253,23 @@ export function parseReactionTemplateText(templateText: string): ReactionTemplat
  * @returns Serialized template text.
  */
 export function serializeReactionTemplate(data: ReactionTemplateData): string {
-	const parts: string[] = ["{{Reaction", data.icon];
+	const params: string[] = [];
+	const icon = data.icon.trim();
+	if (icon) {
+		params.push(`icon=${icon}`);
+	}
 	data.extraParams.forEach(({ key, value }) => {
-		parts.push(`${key}=${value}`);
+		params.push(`${key}=${value}`);
 	});
 	data.participants.forEach((participant, index) => {
 		const idx = index + 1;
-		parts.push(`user${idx}=${participant.user}`);
+		params.push(`user${idx}=${participant.user}`);
 		if (participant.timestamp) {
-			parts.push(`ts${idx}=${participant.timestamp}`);
+			params.push(`ts${idx}=${participant.timestamp}`);
 		}
 	});
-	parts.push("}}");
-	return parts.join("|");
+	const serializedParams = params.join("|");
+	return `{{Reaction${serializedParams ? `|${serializedParams}` : ""}}}`;
 }
 
 /**
@@ -378,11 +394,11 @@ export function removeReactionFromLine(line: string, icon: string | undefined, u
 	if (!target) {
 		return { text: line, modified: false };
 	}
-	const index = target.data.participants.findIndex((participant) => participant.user === userName);
-	if (index === -1) {
+	const originalLength = target.data.participants.length;
+	target.data.participants = target.data.participants.filter((participant) => participant.user !== userName);
+	if (target.data.participants.length === originalLength) {
 		return { text: line, modified: false };
 	}
-	target.data.participants.splice(index, 1);
 	if (target.data.participants.length === 0) {
 		return {
 			text: removeTemplateFromLine(line, target.start, target.end),

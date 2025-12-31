@@ -72,7 +72,7 @@ export async function saveFullText(fulltext: string, summary: string): Promise<b
 			action: "edit",
 			title: state.pageName,
 			text: fulltext,
-			summary: summary + " ([[User:SuperGrey/gadgets/Reaction|Reaction]])",
+			summary: summary + " ([[meta:Reaction|Reaction]])",
 		});
 		mw.notify(tReaction("api.notifications.save_success"), {
 			title: t("default.titles.success"), type: "success",
