@@ -30,6 +30,21 @@ Upload `dist/bundled.js` to your wiki userspace (e.g., `User:YourName/Reaction.j
 mw.loader.load("//your.wiki.org/w/index.php?title=User:YourName/Reaction.js&action=raw&ctype=text/javascript");
 ```
 
+## Prepare Template and Module on your wiki
+
+If your wiki does not host `Template:Reaction` and `Module:Reaction`, you need to install those first.
+
+1. Create `Template:Reaction` with the content from [`wikitext/Reaction.template.wikitext`](wikitext/Reaction.template.wikitext).
+
+2. Clone or download this repository, then run the following command to build the localized wikitext modules:
+
+   ```bash
+   npm install
+   npm run build:wikitext
+   ```
+
+3. Choose the appropriate language version of `Module:Reaction` from the generated `dist/Reaction.module.*.lua` files and create `Module:Reaction` on your wiki with its content.
+
 ## Development
 
 ```bash
@@ -76,18 +91,3 @@ The debug extension sets `localStorage["reaction-dev"] = "1"` at `document_start
 localStorage.removeItem('reaction-dev');
 location.reload();
 ```
-
-## Prepare Template and Module on your wiki
-
-If your wiki does not host `Template:Reaction` and `Module:Reaction`, you need to install those first.
-
-1. Create `Template:Reaction` with the content from [`wikitext/Reaction.template.wikitext`](wikitext/Reaction.template.wikitext).
-
-2. Clone or download this repository, then run the following command to build the localized wikitext modules:
-
-   ```bash
-   npm install
-   npm run build:wikitext
-   ```
-
-3. Choose the appropriate language version of `Module:Reaction` from the generated `dist/Reaction.module.*.lua` files and create `Module:Reaction` on your wiki with its content.
