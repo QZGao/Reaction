@@ -1,5 +1,5 @@
 import state from "../state";
-import { getCurrentSignatureTimestamp, parseTimestamp } from "../utils";
+import { getCurrentSignatureTimestamp, parseTimestamp, normalizeTitle } from "../utils";
 import { modifyPage, type ModifyPageRequest } from "../api/modifyPage";
 import { t, tReaction } from "../i18n";
 import {
@@ -8,6 +8,15 @@ import {
 	hasUserReacted,
 	removeUserFromEntries,
 } from "./commentors";
+import {
+	getDiscussionToolsLookup,
+	createMatchingState,
+	matchCommentById,
+	matchCommentByTimestamp,
+	consumeNextComment,
+	type DiscussionToolsMatchingState,
+	type ThreadCommentMetadata,
+} from "../api/discussionTools";
 
 /**
  * Registry for reaction event handlers. WeakMap stores handler references so they can be removed later.
@@ -22,6 +31,124 @@ const _handlerRegistry = new WeakMap<HTMLElement, EventListener>();
  * @private
  */
 const _buttonTimestamps = new WeakMap<HTMLElement, HTMLElement>();
+
+const TIMESTAMP_SELECTOR = [
+	"a.ext-discussiontools-init-timestamplink",
+	"a.cd-comment-timestamp",
+	"a[data-mw-comment-timestamp]",
+].join(", ");
+
+const COMMENT_METADATA_ATTRIBUTES = [
+	"data-reaction-comment-id",
+	"data-reaction-comment-name",
+	"data-reaction-comment-author",
+	"data-reaction-comment-timestamp",
+] as const;
+
+interface StoredCommentMetadata {
+	commentId?: string | null;
+	commentName?: string | null;
+	commentAuthor?: string | null;
+	commentTimestamp?: string | null;
+}
+
+/**
+ * Store comment metadata attributes on a target element.
+ * @param target - Target HTML element.
+ * @param metadata - Comment metadata to store.
+ */
+function storeCommentMetadata(target: HTMLElement, metadata: ThreadCommentMetadata): void {
+	target.setAttribute("data-reaction-comment-id", metadata.id);
+	if (metadata.name) {
+		target.setAttribute("data-reaction-comment-name", metadata.name);
+	}
+	if (metadata.timestamp) {
+		target.setAttribute("data-reaction-comment-timestamp", metadata.timestamp);
+	}
+	if (metadata.authorText) {
+		target.setAttribute("data-reaction-comment-author", metadata.authorText);
+	} else if (metadata.author) {
+		target.setAttribute("data-reaction-comment-author", metadata.author);
+	}
+}
+
+/**
+ * Copy comment metadata attributes from source to target element.
+ * @param source - Source HTML element.
+ * @param target - Target HTML element.
+ */
+function copyCommentMetadata(source: HTMLElement | null | undefined, target: HTMLElement): void {
+	if (!source) {
+		return;
+	}
+	for (const attr of COMMENT_METADATA_ATTRIBUTES) {
+		const value = source.getAttribute(attr);
+		if (value) {
+			target.setAttribute(attr, value);
+		}
+	}
+}
+
+/**
+ * Read stored comment metadata from an element.
+ * @param element - HTML element to read from.
+ * @returns Stored comment metadata.
+ */
+function readCommentMetadata(element: HTMLElement | null): StoredCommentMetadata {
+	if (!element) {
+		return {};
+	}
+	return {
+		commentId: element.getAttribute("data-reaction-comment-id"),
+		commentName: element.getAttribute("data-reaction-comment-name"),
+		commentAuthor: element.getAttribute("data-reaction-comment-author"),
+		commentTimestamp: element.getAttribute("data-reaction-comment-timestamp"),
+	};
+}
+
+/**
+ * Merge two sets of comment metadata, prioritizing primary values.
+ * @param primary - Primary comment metadata.
+ * @param fallback - Fallback comment metadata.
+ * @returns Merged comment metadata.
+ */
+function mergeCommentMetadata(primary: StoredCommentMetadata, fallback: StoredCommentMetadata): StoredCommentMetadata {
+	return {
+		commentId: primary.commentId ?? fallback.commentId,
+		commentName: primary.commentName ?? fallback.commentName,
+		commentAuthor: primary.commentAuthor ?? fallback.commentAuthor,
+		commentTimestamp: primary.commentTimestamp ?? fallback.commentTimestamp,
+	};
+}
+
+/**
+ * Assign comment metadata to a timestamp element based on matching state.
+ * @param timestampElement - Timestamp HTML element.
+ * @param state - DiscussionTools matching state.
+ * @returns Matched comment metadata or null.
+ */
+function assignCommentMetadata(
+	timestampElement: HTMLElement,
+	state: DiscussionToolsMatchingState | null,
+): ThreadCommentMetadata | null {
+	if (!state) {
+		return null;
+	}
+	const commentId = timestampElement.getAttribute("data-mw-comment-id");
+	if (commentId) {
+		const byIdMatch = matchCommentById(state, commentId);
+		if (byIdMatch) {
+			return byIdMatch;
+		}
+	}
+	const isoTimestamp = timestampElement.getAttribute("data-mw-comment-timestamp");
+	const author = getCommentAuthorFromTimestamp(timestampElement);
+	const timestampMatch = matchCommentByTimestamp(state, isoTimestamp, author);
+	if (timestampMatch) {
+		return timestampMatch;
+	}
+	return consumeNextComment(state);
+}
 
 /**
  * Remove the registered event handler from an element and delete it from the registry.
@@ -68,21 +195,109 @@ function getReactionLabel(button: HTMLElement, icon: HTMLElement): string {
 }
 
 /**
- * Get the timestamp string associated with a reaction button.
- * @param button {HTMLElement} - Reaction button element.
- * @returns {string | null} - Timestamp string or null if not found/parsable.
+ * Extract username from a User or User talk page title.
+ * @param title - Page title.
+ * @returns Username or null if not a user page.
  */
-function getTimestampString(button: HTMLElement): string | null {
+function extractUserFromTitle(title: string): string | null {
+	const match = title.match(/^(?:User(?:[ _]talk)?):(.+)$/i);
+	if (!match) {
+		return null;
+	}
+	const user = match[1].split("#")[0] ?? "";
+	return user.includes("/") ? null : user;
+}
+
+/**
+ * Extract username from a User or User talk page href.
+ * @param href - Page href.
+ * @returns Username or null if not a user page.
+ */
+function extractUserFromHref(href: string): string | null {
+	const decoded = decodeURIComponent(href);
+	const match = decoded.match(/\/wiki\/(?:User(?:_talk)?):([^#?]+)/i);
+	if (!match) {
+		return null;
+	}
+	const target = match[1];
+	return target.includes("/") ? null : target.replace(/_/g, " ");
+}
+
+/**
+ * Get the author username associated with a timestamp element.
+ * @param timestampElement - Timestamp HTML element.
+ * @returns Author username or null if not found.
+ */
+function getCommentAuthorFromTimestamp(timestampElement: HTMLElement): string | null {
+	const directAuthor = timestampElement.getAttribute("data-mw-comment-user");
+	if (directAuthor) {
+		return normalizeTitle(directAuthor);
+	}
+	const comment = timestampElement.closest(".cd-comment-part") ?? timestampElement.closest("li, dd, p");
+	if (!comment) {
+		return null;
+	}
+	const authorLink = comment.querySelector<HTMLElement>(
+		"[data-mw-comment-user], .cd-comment-author.userlink, a.mw-userlink, a[title^='User:'], a[title^='User talk:']",
+	);
+	if (!authorLink) {
+		return null;
+	}
+	let user: string | null = null;
+	const titleAttr = authorLink.getAttribute("title");
+	if (titleAttr) {
+		user = extractUserFromTitle(titleAttr);
+	}
+	if (!user) {
+		const hrefAttr = authorLink.getAttribute("href");
+		if (hrefAttr) {
+			user = extractUserFromHref(hrefAttr);
+		}
+	}
+	if (!user) {
+		const text = authorLink.textContent?.trim();
+		if (text) {
+			user = text;
+		}
+	}
+	return user ? normalizeTitle(user) : null;
+}
+
+interface CommentContext {
+	timestamp: string;
+	author: string | null;
+	commentId?: string | null;
+	commentName?: string | null;
+	commentAuthor?: string | null;
+	commentTimestamp?: string | null;
+}
+
+/**
+ * Retrieve the comment context associated with a reaction button.
+ * @param button {HTMLElement} - Reaction button element.
+ * @returns {CommentContext | null} - Comment context or null if missing.
+ */
+function getCommentContext(button: HTMLElement): CommentContext | null {
 	const timestampElement = _buttonTimestamps.get(button);
 	if (!timestampElement) {
 		console.error("[Reaction] Missing timestamp mapping for button.", button);
 		return null;
 	}
-	const parsedTimestamp = parseTimestamp(timestampElement);
-	if (!parsedTimestamp) {
-		console.error("[Reaction] Unable to parse timestamp from timestamp element.", timestampElement);
+	const timestamp = parseTimestamp(timestampElement);
+	if (!timestamp) {
+		mw.notify(tReaction("dom.errors.missing_timestamp"), { title: t("default.titles.error"), type: "error" });
+		return null;
 	}
-	return parsedTimestamp;
+	const author = getCommentAuthorFromTimestamp(timestampElement);
+	const metadata = mergeCommentMetadata(readCommentMetadata(button), readCommentMetadata(timestampElement));
+	return {
+		timestamp,
+		author,
+		commentId: metadata.commentId ?? null,
+		commentName: metadata.commentName ?? null,
+		commentAuthor: metadata.commentAuthor ?? null,
+		commentTimestamp: metadata.commentTimestamp ?? null,
+	};
 }
 
 /**
@@ -127,12 +342,12 @@ function toggleReaction(button: HTMLElement) {
 	if (!parts) {
 		return;
 	}
-	const { icon, counter } = parts;
-	const timestamp = getTimestampString(button);
-	if (!timestamp) {
-		mw.notify(tReaction("dom.errors.missing_timestamp"), { title: t("default.titles.error"), type: "error" });
+	const context = getCommentContext(button);
+	if (!context) {
 		return;
 	}
+	const { icon, counter } = parts;
+	const { timestamp, author, commentId, commentName, commentAuthor, commentTimestamp } = context;
 	const counterValue = button.getAttribute("data-reaction-count") ?? counter.innerText;
 	const count = Number.parseInt(counterValue, 10) || 0;
 	const reactionLabel = getReactionLabel(button, icon);
@@ -144,7 +359,7 @@ function toggleReaction(button: HTMLElement) {
 			return;
 		}
 
-		const mod: ModifyPageRequest = { timestamp };
+		const mod: ModifyPageRequest = { timestamp, author, commentId, commentName, commentAuthor, commentTimestamp };
 		if (count > 1) {
 			mod.downvote = reactionLabel;
 		} else {
@@ -173,10 +388,7 @@ function toggleReaction(button: HTMLElement) {
 			console.log("[Reaction] Should not happen! " + state.userName + " should not be in " + button.getAttribute("data-reaction-commentors"));
 			return;
 		}
-		const mod: ModifyPageRequest = {
-			timestamp,
-			upvote: reactionLabel,
-		};
+		const mod: ModifyPageRequest = { timestamp, author, upvote: reactionLabel, commentId, commentName, commentAuthor, commentTimestamp };
 
 		void modifyPage(mod).then((response) => {
 			if (!response) {
@@ -249,14 +461,19 @@ function saveNewReaction(button: HTMLElement, event: MouseEvent | false) {
 	}
 
 	// Save the new reaction
-	let timestampElement = _buttonTimestamps.get(button);
-	let timestamp = timestampElement ? parseTimestamp(timestampElement) : null;
-	if (!timestamp) {
-		mw.notify(tReaction("dom.errors.missing_timestamp"), { title: t("default.titles.error"), type: "error" });
+	const context = getCommentContext(button);
+	if (!context) {
 		return;
 	}
-	let mod: ModifyPageRequest = {
-		timestamp: timestamp, append: input.value.trim(),
+	const timestampElement = _buttonTimestamps.get(button) ?? null;
+	const mod: ModifyPageRequest = {
+		timestamp: context.timestamp,
+		author: context.author,
+		commentId: context.commentId ?? null,
+		commentName: context.commentName ?? null,
+		commentAuthor: context.commentAuthor ?? null,
+		commentTimestamp: context.commentTimestamp ?? null,
+		append: input.value.trim(),
 	};
 	void modifyPage(mod).then((response) => {
 		if (response) {
@@ -282,6 +499,7 @@ function saveNewReaction(button: HTMLElement, event: MouseEvent | false) {
 			button.parentNode?.insertBefore(newReactionButton, button.nextSibling);
 			if (timestampElement) {
 				_buttonTimestamps.set(newReactionButton, timestampElement);  // Store the timestamp for the new button
+				copyCommentMetadata(timestampElement, newReactionButton);
 			}
 
 			// Restore the original event handler
@@ -458,7 +676,7 @@ type ReactionRoot = Document | DocumentFragment | Element;
  * @param root {ReactionRoot} - Root element to process.
  * @returns {number} - Number of "new reaction" buttons inserted.
  */
-function processReactionRoot(root: ReactionRoot): number {
+function processReactionRoot(root: ReactionRoot, matchingState: DiscussionToolsMatchingState | null): number {
 	const timestamps = root.querySelectorAll<HTMLAnchorElement>("a.ext-discussiontools-init-timestamplink");
 	const replyButtons = root.querySelectorAll<HTMLSpanElement>("span.ext-discussiontools-init-replylink-buttons");
 	const pairCount = Math.min(timestamps.length, replyButtons.length);
@@ -470,10 +688,15 @@ function processReactionRoot(root: ReactionRoot): number {
 		if (isInPreview(timestamp) || isInPreview(replyButton)) {
 			continue;
 		}
+		const matchedComment = assignCommentMetadata(timestamp, matchingState);
+		if (matchedComment) {
+			storeCommentMetadata(timestamp, matchedComment);
+		}
 		let button = timestamp.nextElementSibling as HTMLElement | null;
 		while (button && button !== replyButton) {
 			if (button.classList.contains("template-reaction") && button.hasAttribute("data-reaction-commentors")) {
 				_buttonTimestamps.set(button, timestamp);
+				copyCommentMetadata(timestamp, button);
 				bindEvent2ReactionButton(button);
 			}
 			button = button.nextElementSibling as HTMLElement | null;
@@ -495,12 +718,6 @@ function processReactionRoot(root: ReactionRoot): number {
 	insertedButtons += processConvenientDiscussionMenus(root);
 	return insertedButtons;
 }
-
-const TIMESTAMP_SELECTOR = [
-	"a.ext-discussiontools-init-timestamplink",
-	"a.cd-comment-button-label.cd-comment-button",
-	"a[data-mw-comment-timestamp]",
-].join(", ");
 
 const PREVIEW_EXCLUDE_SELECTOR = [
 	".preview",
@@ -580,6 +797,7 @@ function insertNewReactionBefore(target: HTMLElement, timestamp?: HTMLElement | 
 	}
 
 	_buttonTimestamps.set(reactionButton, timestampElement);
+	copyCommentMetadata(timestampElement, reactionButton);
 	target.parentNode.insertBefore(reactionButton, target);
 	return true;
 }
@@ -614,7 +832,7 @@ function processConvenientDiscussionMenus(root: ReactionRoot): number {
  * Entry point that wires reaction buttons into the page.
  * @param containers {ReactionRoot | ReactionRoot[] | null | undefined} Optional subset of the DOM to process.
  */
-export function addReactionButtons(containers?: ReactionRoot | ReactionRoot[] | null) {
+export async function addReactionButtons(containers?: ReactionRoot | ReactionRoot[] | null) {
 	const roots: ReactionRoot[] = [];
 	if (!containers) {
 		roots.push(document);
@@ -628,9 +846,12 @@ export function addReactionButtons(containers?: ReactionRoot | ReactionRoot[] | 
 		roots.push(containers);
 	}
 
+	const lookup = await getDiscussionToolsLookup();
+	const matchingState = lookup ? createMatchingState(lookup) : null;
+
 	let totalInserted = 0;
 	for (const root of roots) {
-		totalInserted += processReactionRoot(root);
+		totalInserted += processReactionRoot(root, matchingState);
 		const reactionButtons = Array.from(root.querySelectorAll(".template-reaction[data-reaction-commentors]"));
 		for (const element of reactionButtons) {
 			if (!(element instanceof HTMLElement)) {
@@ -639,13 +860,17 @@ export function addReactionButtons(containers?: ReactionRoot | ReactionRoot[] | 
 			if (isInPreview(element)) {
 				continue;
 			}
-			if (!_buttonTimestamps.has(element)) {
-				const timestampElement = resolveTimestampForNode(element);
-				if (!timestampElement) {
+			let timestampElement = _buttonTimestamps.get(element);
+			if (!timestampElement) {
+				const resolvedTimestamp = resolveTimestampForNode(element);
+				if (!resolvedTimestamp) {
 					console.warn("[Reaction] Unable to find timestamp for reaction button.", element);
 					continue;
 				}
+				timestampElement = resolvedTimestamp;
+				_buttonTimestamps.set(element, resolvedTimestamp);
 			}
+			copyCommentMetadata(timestampElement, element);
 			bindEvent2ReactionButton(element);
 		}
 	}

@@ -1,11 +1,24 @@
 import state from "../state";
-import { escapeRegex, getCurrentSignatureTimestamp } from "../utils";
+import { getCurrentSignatureTimestamp, normalizeTitle } from "../utils";
 import { t, tReaction } from "../i18n";
 import { retrieveFullText, saveFullText } from "./client";
 import { addReactionToLine, appendReactionTemplate, removeReactionFromLine } from "../wikitext/reactionTemplates";
+import { findCommentPosition } from "../wikitext/comments";
+import {
+	getDiscussionToolsLookup,
+	formatSignatureTimestamp,
+	type DiscussionToolsLookup,
+	type ThreadCommentMetadata,
+} from "./discussionTools";
 
 export interface ModifyPageRequest {
 	timestamp: string;
+	author?: string | null;
+	commentId?: string | null;
+	commentName?: string | null;
+	commentAuthor?: string | null;
+	commentTimestamp?: string | null;
+	timestampOccurrence?: number | null;
 	upvote?: string;
 	downvote?: string;
 	append?: string;
@@ -17,6 +30,127 @@ interface PageModificationResult {
 	summary: string;
 }
 
+interface ResolvedCommentContext {
+	timestamp?: string | null;
+	author?: string | null;
+	occurrence?: number | null;
+}
+
+/**
+ * Normalize a user identifier by normalizing the title.
+ * @param value - User identifier.
+ * @returns Normalized user identifier or null.
+ */
+function normalizeUserIdentifier(value?: string | null): string | null {
+	if (!value) {
+		return null;
+	}
+	return normalizeTitle(value);
+}
+
+/**
+ * Select the fallback timestamp from the modification request.
+ * @param mod - Modification request.
+ * @returns Selected timestamp.
+ */
+function selectTimestampFallback(mod: ModifyPageRequest): string {
+	return formatSignatureTimestamp(mod.commentTimestamp ?? undefined) ?? mod.timestamp;
+}
+
+/**
+ * Find the matching comment in the DiscussionTools lookup.
+ * @param lookup - DiscussionTools comment lookup.
+ * @param mod - Modification request.
+ * @returns Matching comment metadata or null.
+ */
+function findLookupComment(lookup: DiscussionToolsLookup, mod: ModifyPageRequest): ThreadCommentMetadata | null {
+	if (mod.commentId) {
+		const comment = lookup.byId.get(mod.commentId);
+		if (comment) {
+			return comment;
+		}
+	}
+	if (mod.commentName) {
+		const byName = lookup.comments.find((entry) => entry.name === mod.commentName);
+		if (byName) {
+			return byName;
+		}
+	}
+	const isoTimestamp = mod.commentTimestamp ?? null;
+	if (isoTimestamp) {
+		const entries = lookup.byTimestamp.get(isoTimestamp);
+		if (entries && entries.length > 0) {
+			if (entries.length === 1) {
+				return entries[0];
+			}
+			const normalized = normalizeUserIdentifier(mod.commentAuthor ?? mod.author ?? null);
+			if (normalized) {
+				const matched = entries.find((entry) => entry.author === normalized);
+				if (matched) {
+					return matched;
+				}
+			}
+			return entries[0];
+		}
+	}
+	return null;
+}
+
+/**
+ * Compute the occurrence index of a comment with the same timestamp.
+ * @param lookup - DiscussionTools comment lookup.
+ * @param target - Target comment metadata.
+ * @returns Occurrence index or null.
+ */
+function computeTimestampOccurrence(
+	lookup: DiscussionToolsLookup,
+	target: ThreadCommentMetadata,
+): number | null {
+	if (!target.signatureTimestamp) {
+		return null;
+	}
+	let occurrence = 0;
+	for (const comment of lookup.comments) {
+		if (comment.signatureTimestamp !== target.signatureTimestamp) {
+			continue;
+		}
+		if (comment.id === target.id) {
+			return occurrence;
+		}
+		occurrence++;
+	}
+	return null;
+}
+
+/**
+ * Resolve the comment context for the modification request.
+ * @param mod - Modification request.
+ * @returns Resolved comment context or null.
+ */
+async function resolveCommentContext(mod: ModifyPageRequest): Promise<ResolvedCommentContext | null> {
+	try {
+		const lookup = await getDiscussionToolsLookup({ fresh: true });
+		if (!lookup) {
+			return null;
+		}
+		const comment = findLookupComment(lookup, mod);
+		if (!comment) {
+			return null;
+		}
+		return {
+			timestamp: comment.signatureTimestamp ?? formatSignatureTimestamp(comment.timestamp),
+			author: comment.authorText ?? comment.author ?? null,
+			occurrence: computeTimestampOccurrence(lookup, comment),
+		};
+	} catch (error: unknown) {
+		console.error(
+			"[Reaction] Failed to resolve DiscussionTools comment context.",
+			error instanceof Error ? error : String(error),
+		);
+		return null;
+	}
+}
+
 /**
  * Apply the requested modification to an existing page text.
  * @param fulltext - Current page text.
@@ -24,23 +158,23 @@ interface PageModificationResult {
  * @returns Modified text plus edit summary.
  */
 export function applyPageModification(fulltext: string, mod: ModifyPageRequest): PageModificationResult {
-	const timestampRegex = new RegExp(`${escapeRegex(mod.timestamp)}`, "g");
-	const timestampMatch = fulltext.match(timestampRegex);
-	if (!timestampMatch || timestampMatch.length === 0) {
-		console.log("[Reaction] Unable to find timestamp " + mod.timestamp + " in: " + fulltext);
+	const locateComment = findCommentPosition as (
+		wikitext: string,
+		timestamp: string,
+		author?: string | null,
+		occurrence?: number | null,
+	) => number | null;
+	const position: number | null = locateComment(fulltext, mod.timestamp, mod.author ?? null, mod.timestampOccurrence ?? null);
+	if (position === null) {
+		console.log(`[Reaction] Unable to locate timestamp ${mod.timestamp}.`);
 		throw new Error(tReaction("api.errors.timestamp_missing", [mod.timestamp]));
 	}
-	if (timestampMatch.length > 1) {
-		console.log("[Reaction] More than one timestamp found: " + timestampMatch.join(", "));
-		throw new Error(tReaction("api.errors.timestamp_conflict", [mod.timestamp]));
-	}
 
-	const pos = fulltext.search(timestampRegex);
-	let lineEnd = fulltext.indexOf("\n", pos);
+	let lineEnd = fulltext.indexOf("\n", position);
 	if (lineEnd === -1) {
 		lineEnd = fulltext.length;
 	}
-	let timestamp2LineEnd = fulltext.slice(pos, lineEnd);
+	let timestamp2LineEnd = fulltext.slice(position, lineEnd);
 	let summary = "";
 
 	if (mod.remove) {
@@ -71,7 +205,7 @@ export function applyPageModification(fulltext: string, mod: ModifyPageRequest):
 		summary = "+ " + mod.append;
 	}
 
-	const newFulltext = fulltext.slice(0, pos) + timestamp2LineEnd + fulltext.slice(lineEnd);
+	const newFulltext = fulltext.slice(0, position) + timestamp2LineEnd + fulltext.slice(lineEnd);
 	if (newFulltext === fulltext) {
 		console.log("[Reaction] Nothing is modified. Could be because using a template inside {{Reaction}}.");
 		throw new Error(tReaction("api.errors.no_changes"));
@@ -89,18 +223,27 @@ export async function modifyPage(mod: ModifyPageRequest): Promise<boolean> {
 	let fulltext: string;
 	try {
 		fulltext = await retrieveFullText();
-	} catch (error) {
-		console.error(error);
+	} catch (error: unknown) {
+		console.error(error instanceof Error ? error : String(error));
 		mw.notify(tReaction("api.notifications.fetch_failure"), { title: t("default.titles.error"), type: "error" });
 		return false;
 	}
 
 	try {
 		console.log("[Reaction] Applying page modification:", mod);
-		const { fulltext: newFulltext, summary } = applyPageModification(fulltext, mod);
+		const resolved = await resolveCommentContext(mod);
+		const resolvedTimestamp = resolved?.timestamp ?? selectTimestampFallback(mod);
+		const resolvedAuthor = resolved?.author ?? mod.commentAuthor ?? mod.author ?? null;
+		const enrichedMod: ModifyPageRequest = {
+			...mod,
+			timestamp: resolvedTimestamp,
+			author: resolvedAuthor,
+			timestampOccurrence: resolved?.occurrence ?? null,
+		};
+		const { fulltext: newFulltext, summary } = applyPageModification(fulltext, enrichedMod);
 		return await saveFullText(newFulltext, summary);
 	} catch (error: unknown) {
-		console.error(error);
+		console.error(error instanceof Error ? error : String(error));
 		const message = error instanceof Error ? error.message : String(error);
 		mw.notify(message, { title: t("default.titles.error"), type: "error" });
 		return false;

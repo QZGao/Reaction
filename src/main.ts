@@ -13,7 +13,9 @@ async function init() {
 	}
 	mw.hook("wikipage.content").add(function (container) {
 		const roots = container?.get ? container.get() : undefined;
-		setTimeout(() => addReactionButtons(roots && roots.length > 0 ? roots : undefined), 200);
+		setTimeout(() => {
+			void addReactionButtons(roots && roots.length > 0 ? roots : undefined);
+		}, 200);
 	});
 }
 

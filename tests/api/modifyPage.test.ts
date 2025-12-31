@@ -22,6 +22,10 @@ import * as i18n from "../../src/i18n";
 vi.mock("../../src/utils", () => ({
 	escapeRegex: (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
 	getCurrentSignatureTimestamp: () => "14:00, 1 January 2024 (UTC)",
+	normalizeTitle: (value: string) => String(value ?? "")
+		.replace(/\s+/g, " ")
+		.trim()
+		.replace(/ /g, "_"),
 }));
 
 vi.mock("../../src/i18n", () => {
@@ -51,6 +55,7 @@ describe("applyPageModification", () => {
 			`User script test. [[User:SuperGrey|'''<span style="color:#765CAE">Super</span><span style="color:#525252">Grey</span>''']] ([[User talk:SuperGrey|talk]]) 12:21, 31 December 2025 (UTC) {{Reaction|👍|Example|ts=12:30, 31 December 2025 (UTC)}} {{Reaction|😄|user1=SuperGrey|ts1=12:42, 31 December 2025 (UTC)}}`;
 		const result = applyPageModification(base, {
 			timestamp: "12:21, 31 December 2025 (UTC)",
+			author: "SuperGrey",
 			upvote: "👍",
 		});
 		expect(result.summary).toBe("+ 👍");
@@ -61,6 +66,7 @@ describe("applyPageModification", () => {
 		// with reformatted Reaction template.
 		const result2 = applyPageModification(result.fulltext, {
 			timestamp: "12:21, 31 December 2025 (UTC)",
+			author: "SuperGrey",
 			upvote: "😄",
 		});
 		expect(result2.summary).toBe("+ 😄");
@@ -75,6 +81,7 @@ describe("applyPageModification", () => {
 		expect(() =>
 			applyPageModification(base, {
 				timestamp: "12:21, 31 December 2025 (UTC)",
+				author: "SuperGrey",
 				upvote: "❤️",
 			}),
 		).toThrow("api.errors.no_changes");
@@ -87,6 +94,7 @@ describe("applyPageModification", () => {
 			`User script test. [[User:SuperGrey|'''<span style="color:#765CAE">Super</span><span style="color:#525252">Grey</span>''']] ([[User talk:SuperGrey|talk]]) 12:21, 31 December 2025 (UTC) {{Reaction|👍|Example|ts=12:30, 31 December 2025 (UTC)|TestUser|ts2=11:00, 1 January 2024 (UTC)}} {{Reaction|😄|user1=SuperGrey|ts1=12:42, 31 December 2025 (UTC)}}`;
 		const result = applyPageModification(base, {
 			timestamp: "12:21, 31 December 2025 (UTC)",
+			author: "SuperGrey",
 			remove: "👍",
 		});
 		expect(result.summary).toBe("− 👍");
@@ -101,6 +109,7 @@ describe("applyPageModification", () => {
 		const base2 = `User script test. [[User:SuperGrey|'''<span style="color:#765CAE">Super</span><span style="color:#525252">Grey</span>''']] ([[User talk:SuperGrey|talk]]) 12:21, 31 December 2025 (UTC) {{Reaction|👍|Example|ts=12:30, 31 December 2025 (UTC)|TestUser|ts2=11:00, 1 January 2024 (UTC)|user3=TestUser|ts3=13:00, 1 January 2024 (UTC)}} {{Reaction|😄|user1=SuperGrey|ts1=12:42, 31 December 2025 (UTC)}}`
 		const result2 = applyPageModification(base2, {
 			timestamp: "12:21, 31 December 2025 (UTC)",
+			author: "SuperGrey",
 			remove: "👍",
 		});
 		expect(result2.summary).toBe("− 👍");
@@ -118,6 +127,7 @@ describe("applyPageModification", () => {
 		expect(() =>
 			applyPageModification(base, {
 				timestamp: "12:21, 31 December 2025 (UTC)",
+				author: "SuperGrey",
 				downvote: "❤️",
 			}),
 		).toThrow("api.errors.no_changes");
@@ -130,6 +140,7 @@ describe("applyPageModification", () => {
 			`User script test. [[User:SuperGrey|'''<span style="color:#765CAE">Super</span><span style="color:#525252">Grey</span>''']] ([[User talk:SuperGrey|talk]]) 12:21, 31 December 2025 (UTC) {{Reaction|👍|Example|ts=12:30, 31 December 2025 (UTC)}} {{Reaction|😄|user1=SuperGrey|ts1=12:42, 31 December 2025 (UTC)}}`;
 		const result = applyPageModification(base, {
 			timestamp: "12:21, 31 December 2025 (UTC)",
+			author: "SuperGrey",
 			append: "❤️",
 		});
 		expect(result.summary).toBe("+ ❤️");
@@ -145,6 +156,7 @@ describe("applyPageModification", () => {
 		expect(() =>
 			applyPageModification(base, {
 				timestamp: "12:21, 31 December 2025 (UTC)",
+				author: "SuperGrey",
 				append: "👍",
 			}),
 		).toThrow("api.errors.reaction_exists");
@@ -153,6 +165,7 @@ describe("applyPageModification", () => {
 		expect(() =>
 			applyPageModification(base, {
 				timestamp: "12:21, 31 December 2025 (UTC)",
+				author: "SuperGrey",
 				append: "😄",
 			}),
 		).toThrow("api.errors.reaction_exists");
@@ -165,6 +178,7 @@ describe("applyPageModification", () => {
 			`User script test. [[User:SuperGrey|'''<span style="color:#765CAE">Super</span><span style="color:#525252">Grey</span>''']] ([[User talk:SuperGrey|talk]]) 12:21, 31 December 2025 (UTC) {{Reaction|👍|TestUser|ts=12:30, 31 December 2025 (UTC)}} {{Reaction|😄|user1=TestUser|ts1=12:42, 31 December 2025 (UTC)}}`;
 		const result = applyPageModification(base, {
 			timestamp: "12:21, 31 December 2025 (UTC)",
+			author: "SuperGrey",
 			downvote: "👍",
 		});
 		expect(result.summary).toBe("− 👍");
@@ -176,6 +190,7 @@ describe("applyPageModification", () => {
 		// as it's the last reaction left.
 		const result2 = applyPageModification(result.fulltext, {
 			timestamp: "12:21, 31 December 2025 (UTC)",
+			author: "SuperGrey",
 			downvote: "😄",
 		});
 		expect(result2.summary).toBe("− 😄");
@@ -192,9 +207,47 @@ describe("applyPageModification", () => {
 		expect(() =>
 			applyPageModification(base, {
 				timestamp: "12:21, 31 December 2025 (UTC)",
+				author: "SuperGrey",
 				remove: "❤️",
 			}),
 		).toThrow("api.errors.no_changes");
+	});
+
+	it("walks the wikitext until the targeted comment index", () => {
+		const base = [
+			"First comment. [[User:Alpha|Alpha]] ([[User talk:Alpha|talk]]) 12:21, 31 December 2025 (UTC)",
+			"Second comment. [[User:Beta|Beta]] ([[User talk:Beta|talk]]) 12:21, 31 December 2025 (UTC) {{Reaction|👍|Alpha|ts=12:30, 31 December 2025 (UTC)}}",
+		].join("\n\n");
+		const result = applyPageModification(base, {
+			timestamp: "12:21, 31 December 2025 (UTC)",
+			author: "Beta",
+			append: "❤️",
+		});
+		expect(result.summary).toBe("+ ❤️");
+		expect(result.fulltext).toContain("First comment. [[User:Alpha|Alpha]] ([[User talk:Alpha|talk]]) 12:21, 31 December 2025 (UTC)");
+		expect(result.fulltext).toMatch(/Reaction\|👍/);
+		expect(result.fulltext).toMatch(/Reaction\|icon=❤️/);
+	});
+
+	it("respects timestamp occurrence when provided", () => {
+		const base = [
+			"Repeat comment. [[User:Beta|Beta]] ([[User talk:Beta|talk]]) 15:00, 1 January 2024 (UTC)",
+			"Repeat comment. [[User:Beta|Beta]] ([[User talk:Beta|talk]]) 15:00, 1 January 2024 (UTC)",
+		].join("\n\n");
+		const result = applyPageModification(base, {
+			timestamp: "15:00, 1 January 2024 (UTC)",
+			author: "Beta",
+			timestampOccurrence: 1,
+			append: "👍",
+		});
+		const firstIndex = result.fulltext.indexOf("Repeat comment.");
+		const lastIndex = result.fulltext.lastIndexOf("Repeat comment.");
+		expect(firstIndex).not.toBe(-1);
+		expect(lastIndex).toBeGreaterThan(firstIndex);
+		const firstSegment = result.fulltext.slice(firstIndex, lastIndex);
+		const secondSegment = result.fulltext.slice(lastIndex);
+		expect(firstSegment).not.toMatch(/Reaction\|icon=👍/);
+		expect(secondSegment).toMatch(/Reaction\|icon=👍/);
 	});
 
 	it("throws when timestamp is missing", () => {

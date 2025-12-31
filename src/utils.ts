@@ -363,7 +363,7 @@ function getTimestampMatchers(): TimestampMatcher[] | null {
  * @param date - Date to format.
  * @returns Signature timestamp or ISO string fallback.
  */
-function formatDateForSignature(date: Date): string {
+export function formatDateForSignature(date: Date): string {
 	const formatter = getTimestampFormatter();
 	if (formatter) {
 		return formatter(date);
