@@ -1,13 +1,7 @@
-import state from "../state";
-import { getCurrentChineseUtc, parseTimestamp } from "../utils";
-import { modifyPage, type ModifyPageRequest } from "../api";
-import { t, tReaction } from "../i18n";
-import {
-	getReactionCommentors,
-	setReactionCommentors,
-	hasUserReacted,
-	removeUserFromEntries,
-} from "./commentors";
+import state from "./state";
+import { getCurrentChineseUtc, parseTimestamp } from "./utils";
+import { modifyPage, type ModifyPageRequest } from "./api";
+import { t, tReaction } from "./i18n";
 
 /**
  * Registry for reaction event handlers. WeakMap stores handler references so they can be removed later.
@@ -22,6 +16,11 @@ const _handlerRegistry = new WeakMap<HTMLElement, EventListener>();
  * @private
  */
 const _buttonTimestamps = new WeakMap<HTMLElement, HTMLElement>();
+
+interface ReactionCommentorEntry {
+	user: string;
+	timestamp?: string;
+}
 
 /**
  * Remove the registered event handler from an element and delete it from the registry.
@@ -83,6 +82,158 @@ function getTimestampString(button: HTMLElement): string | null {
 		console.error("[Reaction] Unable to parse timestamp from timestamp element.", timestampElement);
 	}
 	return parsedTimestamp;
+}
+
+/**
+ * Parse a legacy commentor entry string into a structured object.
+ * @param entry - Legacy commentor entry string.
+ * @returns Parsed ReactionCommentorEntry object.
+ */
+function parseLegacyCommentor(entry: string): ReactionCommentorEntry {
+	const trimmed = entry.trim();
+	if (!trimmed) {
+		return { user: "" };
+	}
+	const match = trimmed.match(/^(.*?)[於于]\s*(.+)$/);
+	if (match) {
+		return {
+			user: match[1].trim(),
+			timestamp: match[2].trim(),
+		};
+	}
+	return { user: trimmed };
+}
+
+/**
+ * Format a ReactionCommentorEntry into a legacy string representation.
+ * @param entry - ReactionCommentorEntry object.
+ * @returns Formatted legacy string.
+ */
+function formatLegacyCommentor(entry: ReactionCommentorEntry): string {
+	return entry.timestamp ? `${entry.user}於${entry.timestamp}` : entry.user;
+}
+
+/**
+ * Format a ReactionCommentorEntry for display in tooltips.
+ * @param entry - ReactionCommentorEntry object.
+ * @returns Formatted string for tooltip.
+ */
+function formatReactionTitleEntry(entry: ReactionCommentorEntry): string {
+	if (entry.timestamp) {
+		return t("dom.reactions.comment_stamp", [entry.user, entry.timestamp]);
+	}
+	return entry.user;
+}
+
+/**
+ * Build the tooltip title for a reaction button based on its commentors.
+ * @param entries - Array of ReactionCommentorEntry objects.
+ * @returns Constructed tooltip title string.
+ */
+function buildReactionTitle(entries: ReactionCommentorEntry[]): string {
+	if (entries.length === 0) {
+		return t("dom.tooltips.no_reactions");
+	}
+	const list = entries.map((entry) => formatReactionTitleEntry(entry)).join(t("dom.reactions.list_separator"));
+	return t("dom.tooltips.reacted_to_comment", [list]);
+}
+
+/**
+ * Parse JSON-encoded commentor entries from a data attribute.
+ * @param json - JSON string from data attribute.
+ * @returns Array of ReactionCommentorEntry objects or null if parsing fails.
+ */
+function parseCommentorJson(json: string | null): ReactionCommentorEntry[] | null {
+	if (!json) {
+		return null;
+	}
+	try {
+		const parsed = JSON.parse(json) as unknown;
+		if (Array.isArray(parsed)) {
+			const entries: ReactionCommentorEntry[] = [];
+			parsed.forEach((item) => {
+				if (item && typeof item === "object") {
+					const record = item as { user?: unknown; timestamp?: unknown };
+					if (typeof record.user === "string") {
+						entries.push({
+							user: record.user,
+							timestamp: typeof record.timestamp === "string" && record.timestamp ? record.timestamp : undefined,
+						});
+					}
+				}
+			});
+			return entries;
+		}
+	} catch {
+		// ignore malformed data
+	}
+	return null;
+}
+
+/**
+ * Get the reaction commentors from a button element.
+ * @param button - Reaction button element.
+ * @returns Array of ReactionCommentorEntry objects.
+ */
+function getReactionCommentors(button: HTMLElement): ReactionCommentorEntry[] {
+	const jsonEntries = parseCommentorJson(button.getAttribute("data-reaction-commentors-json"));
+	if (jsonEntries && jsonEntries.length > 0) {
+		return jsonEntries;
+	}
+	const raw = button.getAttribute("data-reaction-commentors");
+	if (!raw) {
+		return [];
+	}
+	return raw.split("/").map(parseLegacyCommentor).filter((entry) => entry.user);
+}
+
+/**
+ * Set the reaction commentors on a button element.
+ * @param button - Reaction button element.
+ * @param entries - Array of ReactionCommentorEntry objects.
+ */
+function setReactionCommentors(button: HTMLElement, entries: ReactionCommentorEntry[]): void {
+	if (entries.length === 0) {
+		button.removeAttribute("data-reaction-commentors");
+		button.removeAttribute("data-reaction-commentors-json");
+		button.setAttribute("title", buildReactionTitle(entries));
+		return;
+	}
+	button.setAttribute("data-reaction-commentors-json", JSON.stringify(entries));
+	button.setAttribute("data-reaction-commentors", entries.map(formatLegacyCommentor).join("/"));
+	button.setAttribute("title", buildReactionTitle(entries));
+}
+
+/**
+ * Check if the user has reacted based on commentor entries.
+ * @param entries - Array of ReactionCommentorEntry objects.
+ * @param userName - User name to check.
+ * @returns True if the user has reacted, false otherwise.
+ */
+function hasUserReacted(entries: ReactionCommentorEntry[], userName: string | null): boolean {
+	if (!userName) {
+		return false;
+	}
+	return entries.some((entry) => entry.user === userName);
+}
+
+/**
+ * Remove a user from the commentor entries.
+ * @param entries - Array of ReactionCommentorEntry objects.
+ * @param userName - User name to remove.
+ * @returns Updated array of ReactionCommentorEntry objects.
+ */
+function removeUserFromEntries(entries: ReactionCommentorEntry[], userName: string | null): ReactionCommentorEntry[] {
+	if (!userName) {
+		return entries;
+	}
+	const index = entries.findIndex((entry) => entry.user === userName);
+	if (index === -1) {
+		return entries;
+	}
+	const updated = entries.slice();
+	updated.splice(index, 1);
+	return updated;
 }
 
 /**

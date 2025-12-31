@@ -75,12 +75,12 @@ export async function saveFullText(fulltext: string, summary: string): Promise<b
 			summary: summary + " ([[User:SuperGrey/gadgets/Reaction|Reaction]])",
 		});
 		mw.notify(tReaction("api.notifications.save_success"), {
-			title: t("api.titles.success"), type: "success",
+			title: t("default.titles.success"), type: "success",
 		});
 		return true;
 	} catch (error) {
 		console.error(error);
-		mw.notify(tReaction("api.notifications.save_failure"), { title: t("api.titles.error"), type: "error" });
+		mw.notify(tReaction("api.notifications.save_failure"), { title: t("default.titles.error"), type: "error" });
 		return false;
 	}
 }

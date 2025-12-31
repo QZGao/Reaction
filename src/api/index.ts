@@ -23,7 +23,7 @@ export async function modifyPage(mod: ModifyPageRequest): Promise<boolean> {
 		fulltext = await retrieveFullText();
 	} catch (error) {
 		console.error(error);
-		mw.notify(tReaction("api.notifications.fetch_failure"), { title: t("api.titles.error"), type: "error" });
+		mw.notify(tReaction("api.notifications.fetch_failure"), { title: t("default.titles.error"), type: "error" });
 		return false;
 	}
 
@@ -86,7 +86,7 @@ export async function modifyPage(mod: ModifyPageRequest): Promise<boolean> {
 	} catch (error: unknown) {
 		console.error(error);
 		const message = error instanceof Error ? error.message : String(error);
-		mw.notify(message, { title: t("api.titles.error"), type: "error" });
+		mw.notify(message, { title: t("default.titles.error"), type: "error" });
 		return false;
 	}
 }
