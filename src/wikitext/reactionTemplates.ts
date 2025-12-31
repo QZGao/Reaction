@@ -1,66 +1,24 @@
-import state from "./state";
-import { escapeRegex, getCurrentChineseUtc } from "./utils";
-import { t, tReaction } from "./i18n";
-
-interface RevisionSlot {
-	main: {
-		"*": string;
-	};
-}
-
-interface Revision {
-	slots: RevisionSlot;
-}
-
-interface QueryPage {
-	revisions: Revision[];
-}
-
-interface RetrieveFullTextResponse {
-	query: {
-		pageids: string[];
-		pages: Record<string, QueryPage>;
-	};
-}
-
-// MediaWiki API instance cache
-let apiInstance: mw.Api | null = null;
-
 /**
- * Retrieve the shared MediaWiki API instance.
- * @returns {mw.Api} - MediaWiki API instance.
+ * Structured representation of a reaction participant.
  */
-function getApi(): mw.Api {
-	if (!apiInstance) {
-		apiInstance = new mw.Api({
-			ajax: {
-				headers: { "User-Agent": `Reaction/${state.version}` }
-			}
-		});
-	}
-	return apiInstance;
-}
-
-export interface ModifyPageRequest {
-	timestamp: string;
-	upvote?: string;
-	downvote?: string;
-	append?: string;
-	remove?: string;
-}
-
-interface ReactionParticipant {
+export interface ReactionParticipant {
 	user: string;
 	timestamp?: string;
 }
 
-interface ReactionTemplateData {
+/**
+ * Structured data extracted from a Reaction template.
+ */
+export interface ReactionTemplateData {
 	icon: string;
 	participants: ReactionParticipant[];
 	extraParams: Array<{ key: string; value: string }>;
 }
 
-interface ReactionTemplateMatch {
+/**
+ * Reaction template match information when scanning wikitext.
+ */
+export interface ReactionTemplateMatch {
 	start: number;
 	end: number;
 	text: string;
@@ -72,7 +30,7 @@ interface ReactionTemplateMatch {
  * @param icon - Raw icon string.
  * @returns Normalized icon string.
  */
-function normalizeIcon(icon: string | undefined): string {
+export function normalizeIcon(icon: string | undefined): string {
 	return (icon ?? "").trim();
 }
 
@@ -81,7 +39,7 @@ function normalizeIcon(icon: string | undefined): string {
  * @param entry - Raw participant string.
  * @returns Parsed ReactionParticipant object.
  */
-function parseLegacyParticipant(entry: string): ReactionParticipant {
+export function parseLegacyParticipant(entry: string): ReactionParticipant {
 	const trimmed = entry.trim();
 	if (!trimmed) {
 		return { user: "" };
@@ -101,7 +59,7 @@ function parseLegacyParticipant(entry: string): ReactionParticipant {
  * @param input - Raw template parameter string.
  * @returns Array of individual parameter strings.
  */
-function splitTemplateParameters(input: string): string[] {
+export function splitTemplateParameters(input: string): string[] {
 	const parts: string[] = [];
 	let current = "";
 	let braceDepth = 0;
@@ -149,11 +107,11 @@ function splitTemplateParameters(input: string): string[] {
 }
 
 /**
- * Consume the icon parameter from the list of template parameters.
+ * Consume the icon parameter from a list of template parameters.
  * @param params - Array of template parameter strings.
  * @returns Object containing the icon value and whether it was positional.
  */
-function consumeIconParameter(params: string[]): { icon: string; positional: boolean } {
+export function consumeIconParameter(params: string[]): { icon: string; positional: boolean } {
 	if (params.length === 0) {
 		return { icon: "", positional: false };
 	}
@@ -197,7 +155,7 @@ function consumeIconParameter(params: string[]): { icon: string; positional: boo
  * @param templateText - Raw template text.
  * @returns Parsed ReactionTemplateData or null if invalid.
  */
-function parseReactionTemplateText(templateText: string): ReactionTemplateData | null {
+export function parseReactionTemplateText(templateText: string): ReactionTemplateData | null {
 	const trimmed = templateText.trim();
 	if (!trimmed.startsWith("{{") || !trimmed.endsWith("}}")) {
 		return null;
@@ -282,7 +240,7 @@ function parseReactionTemplateText(templateText: string): ReactionTemplateData |
  * @param data - Structured ReactionTemplateData.
  * @returns Serialized template text.
  */
-function serializeReactionTemplate(data: ReactionTemplateData): string {
+export function serializeReactionTemplate(data: ReactionTemplateData): string {
 	const parts: string[] = ["{{Reaction", data.icon];
 	data.extraParams.forEach(({ key, value }) => {
 		parts.push(`${key}=${value}`);
@@ -304,7 +262,7 @@ function serializeReactionTemplate(data: ReactionTemplateData): string {
  * @param startIndex - Starting index of the template (position of "{{").
  * @returns Index of the character after the closing "}}" or -1 if not found.
  */
-function findTemplateEnd(text: string, startIndex: number): number {
+export function findTemplateEnd(text: string, startIndex: number): number {
 	let depth = 0;
 	for (let i = startIndex; i < text.length - 1; i++) {
 		const pair = text.slice(i, i + 2);
@@ -329,7 +287,7 @@ function findTemplateEnd(text: string, startIndex: number): number {
  * @param line - Line of text.
  * @returns Array of ReactionTemplateMatch objects.
  */
-function findReactionTemplates(line: string): ReactionTemplateMatch[] {
+export function findReactionTemplates(line: string): ReactionTemplateMatch[] {
 	const matches: ReactionTemplateMatch[] = [];
 	let index = 0;
 	while (index < line.length) {
@@ -358,7 +316,7 @@ function findReactionTemplates(line: string): ReactionTemplateMatch[] {
 
 /**
  * Replace a range of text in a line with a replacement string.
- * @param line - Original line of text.
+ * @param line - Line of text.
  * @param start - Start index of the range to replace.
  * @param end - End index of the range to replace.
  * @param replacement - Replacement string.
@@ -369,8 +327,8 @@ function replaceRange(line: string, start: number, end: number, replacement: str
 }
 
 /**
- * Remove a template from a line of text, adjusting surrounding whitespace.
- * @param line - Original line of text.
+ * Remove a Reaction template from a line of text, adjusting surrounding spaces.
+ * @param line - Line of text.
  * @param start - Start index of the template.
  * @param end - End index of the template.
  * @returns Modified line of text.
@@ -396,7 +354,7 @@ function removeTemplateFromLine(line: string, start: number, end: number): strin
  * @param icon - Icon string to search for.
  * @returns Matching ReactionTemplateMatch or undefined if not found.
  */
-function findTemplateByIcon(templates: ReactionTemplateMatch[], icon: string | undefined): ReactionTemplateMatch | undefined {
+export function findTemplateByIcon(templates: ReactionTemplateMatch[], icon: string | undefined): ReactionTemplateMatch | undefined {
 	if (!icon) {
 		return undefined;
 	}
@@ -411,7 +369,7 @@ function findTemplateByIcon(templates: ReactionTemplateMatch[], icon: string | u
  * @param userName - User name of the participant to remove.
  * @returns Object containing modified text and whether a change was made.
  */
-function removeReactionFromLine(line: string, icon: string | undefined, userName: string | null): { text: string; modified: boolean } {
+export function removeReactionFromLine(line: string, icon: string | undefined, userName: string | null): { text: string; modified: boolean } {
 	if (!icon || !userName) {
 		return { text: line, modified: false };
 	}
@@ -446,7 +404,7 @@ function removeReactionFromLine(line: string, icon: string | undefined, userName
  * @param timestamp - Timestamp string for the participant.
  * @returns Object containing modified text and whether a change was made.
  */
-function addReactionToLine(
+export function addReactionToLine(
 	line: string,
 	icon: string | undefined,
 	userName: string | null,
@@ -479,7 +437,7 @@ function addReactionToLine(
  * @param timestamp - Timestamp string for the participant.
  * @returns Object containing modified text and whether a change was made.
  */
-function appendReactionTemplate(
+export function appendReactionTemplate(
 	line: string,
 	icon: string | undefined,
 	userName: string | null,
@@ -503,137 +461,4 @@ function appendReactionTemplate(
 		text: `${line}${needsSpace ? " " : ""}${serialized}`,
 		modified: true,
 	};
-}
-
-/**
- * Fetch the complete wikitext for the current page.
- * @returns {Promise<string>} Promise resolving to the page wikitext.
- */
-async function retrieveFullText(): Promise<string> {
-	const response = await getApi().get({
-		action: "query",
-		titles: state.pageName,
-		prop: "revisions",
-		rvslots: "*",
-		rvprop: "content",
-		indexpageids: 1,
-	}) as RetrieveFullTextResponse;
-	const pageId = response.query.pageids[0];
-	const page = response.query.pages[pageId];
-	const revision = page?.revisions?.[0];
-	const fulltext = revision?.slots?.main?.["*"] ?? "";
-	return `${fulltext}\n`;
-}
-
-/**
- * Save a full wikitext snapshot.
- * @param fulltext {string} - Wikitext payload to save.
- * @param summary {string} - Edit summary.
- * @returns {Promise<boolean>} - Promise indicating success.
- */
-async function saveFullText(fulltext: string, summary: string): Promise<boolean> {
-	try {
-		await getApi().postWithToken("edit", {
-			action: "edit",
-			title: state.pageName,
-			text: fulltext,
-			summary: summary + " ([[User:SuperGrey/gadgets/Reaction|Reaction]])",
-		});
-		mw.notify(tReaction("api.notifications.save_success"), {
-			title: t("api.titles.success"), type: "success",
-		});
-		return true;
-	} catch (error) {
-		console.error(error);
-		mw.notify(tReaction("api.notifications.save_failure"), { title: t("api.titles.error"), type: "error" });
-		return false;
-	}
-}
-
-/**
- * Modify the page content according to the requested change set.
- * @param mod {Object} - Fields describing the change (timestamp plus upvote/downvote/append/remove instructions).
- * @returns {Promise<boolean>} - Promise indicating success.
- */
-export async function modifyPage(mod: ModifyPageRequest): Promise<boolean> {
-	let fulltext: string;
-	try {
-		fulltext = await retrieveFullText();
-	} catch (error) {
-		console.error(error);
-		mw.notify(tReaction("api.notifications.fetch_failure"), { title: t("api.titles.error"), type: "error" });
-		return false;
-	}
-
-	let newFulltext = fulltext;
-	let summary = "";
-	try {
-		let timestampRegex = new RegExp(`${escapeRegex(mod.timestamp)}`, "g");
-		let timestampMatch = fulltext.match(timestampRegex);
-
-		// If the timestamp is not found, throw an error
-		if (!timestampMatch || timestampMatch.length === 0) {
-			console.log("[Reaction] Unable to find timestamp " + mod.timestamp + " in: " + fulltext);
-			throw new Error(tReaction("api.errors.timestamp_missing", [mod.timestamp]));
-		}
-
-		// Check if more than one match is found.
-		if (timestampMatch.length > 1) {
-			console.log("[Reaction] More than one timestamp found: " + timestampMatch.join(", "));
-			throw new Error(tReaction("api.errors.timestamp_conflict", [mod.timestamp]));
-		}
-
-		let pos = fulltext.search(timestampRegex);
-		console.log("[Reaction] Found timestamp " + mod.timestamp + " at position " + pos);
-
-		let lineEnd = fulltext.indexOf("\n", pos);
-		if (lineEnd === -1) {
-			lineEnd = fulltext.length;
-		}
-		let timestamp2LineEnd = fulltext.slice(pos, lineEnd);
-
-		if (mod.remove) {
-			const result = removeReactionFromLine(timestamp2LineEnd, mod.remove, state.userName);
-			timestamp2LineEnd = result.text;
-			if (result.modified) {
-				summary = "− " + mod.remove;
-			}
-		} else if (mod.downvote) {
-			const result = removeReactionFromLine(timestamp2LineEnd, mod.downvote, state.userName);
-			timestamp2LineEnd = result.text;
-			if (result.modified) {
-				summary = "− " + mod.downvote;
-			}
-		} else if (mod.upvote) {
-			const result = addReactionToLine(timestamp2LineEnd, mod.upvote, state.userName, getCurrentChineseUtc());
-			timestamp2LineEnd = result.text;
-			if (result.modified) {
-				summary = "+ " + mod.upvote;
-			}
-		} else if (mod.append) {
-			const result = appendReactionTemplate(timestamp2LineEnd, mod.append, state.userName, getCurrentChineseUtc());
-			if (!result.modified) {
-				console.log("[Reaction] Reaction of " + mod.append + " already exists in: " + timestamp2LineEnd);
-				throw new Error(tReaction("api.errors.reaction_exists"));
-			}
-			timestamp2LineEnd = result.text;
-			summary = "+ " + mod.append;
-		}
-
-		newFulltext = fulltext.slice(0, pos) + timestamp2LineEnd + fulltext.slice(lineEnd);
-
-		if (newFulltext === fulltext) {
-			console.log("[Reaction] Nothing is modified. Could be because using a template inside {{Reaction}}.");
-			throw new Error(tReaction("api.errors.no_changes"));
-		}
-
-		// Save the full text; errors are surfaced inside saveFullText().
-		return await saveFullText(newFulltext, summary);
-
-	} catch (error: unknown) {
-		console.error(error);
-		const message = error instanceof Error ? error.message : String(error);
-		mw.notify(message, { title: t("api.titles.error"), type: "error" });
-		return false;
-	}
 }
