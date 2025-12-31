@@ -5,14 +5,15 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const projectRoot = path.join(__dirname, "..");
 
 const watch = process.argv.includes('--watch');
 const debug = process.argv.includes('--debug');
-const pkgJson = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
-const outFile = path.join(__dirname, debug ? '.debug' : 'dist', 'bundled.js');
+const pkgJson = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
+const outFile = path.join(projectRoot, debug ? '.debug' : 'dist', 'bundled.js');
 
 const I18N_VIRTUAL_ID = 'virtual:i18n-catalogues';
-const i18nDir = path.join(__dirname, 'src', 'i18n');
+const i18nDir = path.join(projectRoot, 'i18n');
 
 const i18nCatalogPlugin = {
 	name: 'i18n-catalogues',
@@ -62,7 +63,7 @@ export default catalogues;
 const createBuildOptions = () => {
 	const timestamp = new Date().toISOString();
 	return {
-		entryPoints: [path.join(__dirname, 'src', 'main.ts')],
+		entryPoints: [path.join(projectRoot, 'src', 'main.ts')],
 		outfile: outFile,
 		bundle: true,
 		format: 'iife',
@@ -93,6 +94,8 @@ const createBuildOptions = () => {
 		const buildOptions = createBuildOptions();
 		if (watch) {
 			const ctx = await esbuild.context(buildOptions);
+			console.log('[Reaction build] Building...');
+			await ctx.rebuild();
 			await ctx.watch();
 			console.log('[Reaction build] Watching for changes...');
 		} else {

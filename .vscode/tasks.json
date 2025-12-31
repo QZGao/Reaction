@@ -24,7 +24,7 @@
 				],
 				"background": {
 					"activeOnStart": true,
-					"beginsPattern": "\\[Reaction build\\] Watching for changes\\.\\.\\.",
+					"beginsPattern": "\\[Reaction build\\] Building\\.\\.\\.",
 					"endsPattern": "\\[Reaction build\\] Watching for changes\\.\\.\\."
 				}
 			}

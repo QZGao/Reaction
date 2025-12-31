@@ -22,5 +22,11 @@
 	"dom.reactions.label": "Reaction",
 	"dom.reactions.list_separator": ", ",
 	"dom.tooltips.no_reactions": "No one has responded to this comment yet.",
-	"dom.tooltips.reacted_to_comment": "$1 responded to this comment."
+	"dom.tooltips.reacted_to_comment": "$1 responded to this comment.",
+	"module.reaction.icon_invalid_message": "Unsupported icon input",
+	"module.reaction.tooltip_separator": ", ",
+	"module.reaction.tooltip_suffix": " responded to this comment.",
+	"module.reaction.tooltip_stamp": "%s at %s",
+	"module.reaction.tooltip_prefix_no_reactions": "No one",
+	"module.reaction.legacy_separator_pattern": "^(.-)%s+at%s*(.+)$"
 }

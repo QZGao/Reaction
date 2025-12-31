@@ -22,5 +22,11 @@
 	"dom.reactions.label": "反應",
 	"dom.reactions.list_separator": "、",
 	"dom.tooltips.no_reactions": "沒有人回應這條留言",
-	"dom.tooltips.reacted_to_comment": "$1回應了這條留言"
+	"dom.tooltips.reacted_to_comment": "$1回應了這條留言",
+	"module.reaction.icon_invalid_message": "不支援輸入的圖標",
+	"module.reaction.tooltip_separator": "、",
+	"module.reaction.tooltip_suffix": "回應了這條留言",
+	"module.reaction.tooltip_stamp": "%s於%s",
+	"module.reaction.tooltip_prefix_no_reactions": "沒有人",
+	"module.reaction.legacy_separator_pattern": "^(.-)[於于]%s*(.+)$"
 }

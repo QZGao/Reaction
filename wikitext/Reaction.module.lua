@@ -1,18 +1,20 @@
 -- This module implements {{Reaction}}.
 -- Maintainers: SunAfterRain, SuperGrey
 -- Repository: https://github.com/QZGao/Reaction
+-- Release: {{module.reaction.version}}
+-- Timestamp: {{module.reaction.timestamp}}
 -- <nowiki>
 local p = {}
 local mIfexist
 
 -- Centralized text constants for the on-wiki fallback UI.
 local TEXT = {
-    iconInvalidMessage = "不-{zh-hans:支持;zh-hant:支援;}-輸入的圖標",
-    tooltipSeparator = "、",
-    tooltipSuffix = "回应了这条留言",
-    tooltipStamp = "%s於%s",
-    tooltipPrefixNoReactions = "没有人",
-    legacySeparatorPattern = "^(.-)[於于]%s*(.+)$"
+    iconInvalidMessage = "{{module.reaction.icon_invalid_message}}",
+    tooltipSeparator = "{{module.reaction.tooltip_separator}}",
+    tooltipSuffix = "{{module.reaction.tooltip_suffix}}",
+    tooltipStamp = "{{module.reaction.tooltip_stamp}}",
+    tooltipPrefixNoReactions = "{{module.reaction.tooltip_prefix_no_reactions}}",
+    legacySeparatorPattern = "{{module.reaction.legacy_separator_pattern}}"
 }
 TEXT.tooltipNoReactions = TEXT.tooltipPrefixNoReactions .. TEXT.tooltipSuffix
 
