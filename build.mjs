@@ -7,7 +7,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const watch = process.argv.includes('--watch');
+const debug = process.argv.includes('--debug');
 const pkgJson = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
+const outFile = path.join(__dirname, debug ? '.debug' : 'dist', 'bundled.js');
 
 const I18N_VIRTUAL_ID = 'virtual:i18n-catalogues';
 const i18nDir = path.join(__dirname, 'src', 'i18n');
@@ -61,13 +63,13 @@ const createBuildOptions = () => {
 	const timestamp = new Date().toISOString();
 	return {
 		entryPoints: [path.join(__dirname, 'src', 'main.ts')],
-		outfile: path.join(__dirname, 'dist', 'bundled.js'),
+		outfile: outFile,
 		bundle: true,
 		format: 'iife',
 		charset: 'utf8',
 		target: ['es2017'],
-		minify: false,
-		sourcemap: false,
+		minify: !debug,
+		sourcemap: debug ? 'inline' : false,
 		plugins: [i18nCatalogPlugin],
 		// Tell esbuild to load CSS files as text so they're bundled into the JS
 		loader: {

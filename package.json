@@ -11,7 +11,9 @@
 	},
 	"scripts": {
 		"build": "node build.mjs",
+		"build:debug": "node build.mjs --debug",
 		"watch": "node build.mjs --watch",
+		"watch:debug": "node build.mjs --watch --debug",
 		"lint": "eslint \"src/**/*.{ts,tsx}\" --no-inline-config",
 		"test": "vitest run",
 		"test:watch": "vitest"
