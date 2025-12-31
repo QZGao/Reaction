@@ -27,6 +27,5 @@
 	"module.reaction.tooltip_separator": "、",
 	"module.reaction.tooltip_suffix": "回應了這條留言",
 	"module.reaction.tooltip_stamp": "%s於%s",
-	"module.reaction.tooltip_prefix_no_reactions": "沒有人",
-	"module.reaction.legacy_separator_pattern": "^(.-)[於于]%s*(.+)$"
+	"module.reaction.tooltip_prefix_no_reactions": "沒有人"
 }

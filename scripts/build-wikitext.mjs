@@ -15,8 +15,7 @@ const PLACEHOLDERS = [
 	"module.reaction.tooltip_separator",
 	"module.reaction.tooltip_suffix",
 	"module.reaction.tooltip_stamp",
-	"module.reaction.tooltip_prefix_no_reactions",
-	"module.reaction.legacy_separator_pattern",
+	"module.reaction.tooltip_prefix_no_reactions"
 ];
 
 const FALLBACK_LANG = "en";

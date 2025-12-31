@@ -13,8 +13,7 @@ local TEXT = {
     tooltipSeparator = "{{module.reaction.tooltip_separator}}",
     tooltipSuffix = "{{module.reaction.tooltip_suffix}}",
     tooltipStamp = "{{module.reaction.tooltip_stamp}}",
-    tooltipPrefixNoReactions = "{{module.reaction.tooltip_prefix_no_reactions}}",
-    legacySeparatorPattern = "{{module.reaction.legacy_separator_pattern}}"
+    tooltipPrefixNoReactions = "{{module.reaction.tooltip_prefix_no_reactions}}"
 }
 TEXT.tooltipNoReactions = TEXT.tooltipPrefixNoReactions .. TEXT.tooltipSuffix
 
@@ -131,7 +130,7 @@ local function parseLegacyReaction(entry)
     if trimmed == "" then
         return nil, nil
     end
-    local user, timestamp = mw.ustring.match(trimmed, TEXT.legacySeparatorPattern)
+    local user, timestamp = mw.ustring.match(trimmed, "^(.-)[於于]%s*(.+)$")
     if user then
         user = mw.text.trim(user)
         timestamp = mw.text.trim(timestamp)

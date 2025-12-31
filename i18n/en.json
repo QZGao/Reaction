@@ -27,6 +27,5 @@
 	"module.reaction.tooltip_separator": ", ",
 	"module.reaction.tooltip_suffix": " responded to this comment.",
 	"module.reaction.tooltip_stamp": "%s at %s",
-	"module.reaction.tooltip_prefix_no_reactions": "No one",
-	"module.reaction.legacy_separator_pattern": "^(.-)%s+at%s*(.+)$"
+	"module.reaction.tooltip_prefix_no_reactions": "No one"
 }
