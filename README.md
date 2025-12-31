@@ -36,14 +36,16 @@ If your wiki does not host `Template:Reaction` and `Module:Reaction`, you need t
 
 1. Create `Template:Reaction` with the content from [`wikitext/Reaction.template.wikitext`](wikitext/Reaction.template.wikitext).
 
-2. Clone or download this repository, then run the following command to build the localized wikitext modules:
+2. Create `Template:Reaction/styles.css` with the content from [en:Template:Reaction/styles.css](https://en.wikipedia.org/wiki/Template:Reaction/styles.css).
+
+3. Clone or download this repository, then run the following command to build the localized wikitext modules:
 
    ```bash
    npm install
    npm run build:wikitext
    ```
 
-3. Choose the appropriate language version of `Module:Reaction` from the generated `dist/Reaction.module.*.lua` files and create `Module:Reaction` on your wiki with its content.
+4. Choose the appropriate language version of `Module:Reaction` from the generated `dist/Reaction.module.*.lua` files and create `Module:Reaction` on your wiki with its content.
 
 ## Development
 
