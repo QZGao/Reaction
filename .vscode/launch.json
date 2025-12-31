@@ -1,0 +1,27 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Debug Reaction on Wikipedia",
+			"type": "firefox",
+			"request": "launch",
+			"reAttach": true,
+			"url": "https://en.wikipedia.org/wiki/User:SuperGrey/Reaction_Testing_Ground",
+			"webRoot": "${workspaceFolder}",
+			"addonPath": "${workspaceFolder}/.debug",
+			"preLaunchTask": "watch-debug-extension",
+			"reloadOnChange": {
+				"watch": [
+					"${workspaceFolder}/.debug/bundled.js",
+					"${workspaceFolder}/.debug/inject.js",
+					"${workspaceFolder}/.debug/manifest.json"
+				],
+				"debounce": 200
+			},
+			"skipFiles": [
+				"**/load.php*",
+				"**/ext.*.js"
+			]
+		}
+	]
+}
