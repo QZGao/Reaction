@@ -1,0 +1,23 @@
+{
+	"manifest_version": 2,
+	"name": "Reaction Dev",
+	"version": "1.0",
+	"description": "Development loader for Reaction",
+	"content_scripts": [
+		{
+			"matches": [
+				"*://*.wikipedia.org/*"
+			],
+			"js": [
+				"inject.js"
+			],
+			"run_at": "document_start"
+		}
+	],
+	"web_accessible_resources": [
+		"bundled.js"
+	],
+	"permissions": [
+		"*://*.wikipedia.org/*"
+	]
+}

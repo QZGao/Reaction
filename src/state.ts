@@ -1,38 +1,23 @@
-declare var mw: any;
+import pkg from "../package.json";
 
 /**
- * 全局狀態管理。
+ * Global state container for the gadget.
  */
 class State {
-    /**
-     * 使用者名稱，從MediaWiki配置中獲取。
-     * @type {string}
-     * @constant
-     */
-    userName: string = mw.config.get('wgUserName');
+	/**
+	 * Logged-in user name from MediaWiki configuration.
+	 */
+	userName: string | null = mw.config.get("wgUserName");
 
-    /**
-     * 頁面名稱，從MediaWiki配置中獲取。
-     * @type {string}
-     * @constant
-     */
-    pageName: string = mw.config.get('wgPageName');
+	/**
+	 * Current page title from MediaWiki configuration.
+	 */
+	pageName: string = mw.config.get("wgPageName");
 
-    // 簡繁轉換
-    convByVar = function (langDict: any) {
-        if (langDict && langDict.hant) {
-            return langDict.hant; // 預設返回繁體中文
-        }
-        return "繁簡轉換未初始化，且 langDict 無效！";
-    };
-
-    async initHanAssist(): Promise<void> {
-        let require = await mw.loader.using('ext.gadget.HanAssist');
-        const {convByVar} = require('ext.gadget.HanAssist');
-        if (typeof convByVar === 'function') {
-            this.convByVar = convByVar;
-        }
-    }
+	/**
+	 * Gadget version from package.json for display/debugging.
+	 */
+	version: string = pkg.version;
 }
 
 export const state = new State();

@@ -1,0 +1,97 @@
+import state from "../state";
+import { t, tReaction } from "../i18n";
+
+interface RevisionSlot {
+	main: {
+		"*": string;
+	};
+}
+
+interface Revision {
+	slots: RevisionSlot;
+}
+
+interface QueryPage {
+	revisions: Revision[];
+}
+
+interface RetrieveFullTextResponse {
+	query: {
+		pageids: string[];
+		pages: Record<string, QueryPage>;
+	};
+}
+
+// MediaWiki API instance cache
+let apiInstance: mw.Api | null = null;
+
+/**
+ * Retrieve the shared MediaWiki API instance.
+ * @returns MediaWiki API instance.
+ */
+export function getApi(): mw.Api {
+	if (!apiInstance) {
+		apiInstance = new mw.Api({
+			ajax: {
+				headers: { "User-Agent": `Reaction/${state.version}` }
+			}
+		});
+	}
+	return apiInstance;
+}
+
+/**
+ * Fetch the current page wikitext.
+ * @param title - Optional page title override.
+ * @returns Raw page wikitext or null if unavailable.
+ */
+export async function fetchPageWikitext(title?: string): Promise<string | null> {
+	const response = await getApi().get({
+		action: "query",
+		titles: title ?? state.pageName,
+		prop: "revisions",
+		rvslots: "*",
+		rvprop: "content",
+		indexpageids: 1,
+	}) as RetrieveFullTextResponse;
+	const pageId = response.query.pageids[0];
+	const page = response.query.pages[pageId];
+	const revision = page?.revisions?.[0];
+	const slot = revision?.slots?.main;
+	const content = slot?.["*"] ?? (slot as { content?: string } | undefined)?.content ?? null;
+	return typeof content === "string" ? content : null;
+}
+
+/**
+ * Fetch the complete wikitext for the current page.
+ * @returns Promise resolving to the page wikitext.
+ */
+export async function retrieveFullText(): Promise<string> {
+	const fulltext = await fetchPageWikitext();
+	return `${fulltext ?? ""}\n`;
+}
+
+/**
+ * Save a full wikitext snapshot.
+ * @param fulltext - Wikitext payload to save.
+ * @param summary - Edit summary.
+ * @returns Promise indicating success.
+ */
+export async function saveFullText(fulltext: string, summary: string): Promise<boolean> {
+	try {
+		await getApi().postWithToken("edit", {
+			action: "edit",
+			title: state.pageName,
+			text: fulltext,
+			summary: summary + " ([[meta:Reaction|Reaction]])",
+		});
+		mw.notify(tReaction("api.notifications.save_success"), {
+			title: t("default.titles.success"), type: "success",
+		});
+		return true;
+	} catch (error) {
+		console.error(error);
+		mw.notify(tReaction("api.notifications.save_failure"), { title: t("default.titles.error"), type: "error" });
+		return false;
+	}
+}
