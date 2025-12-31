@@ -9,26 +9,26 @@ interface HanAssistDictionary {
 type HanAssistConverter = (langDict: HanAssistDictionary) => string;
 
 /**
- * 全局狀態管理。
+ * Global state container for the gadget.
  */
 class State {
 	/**
-	 * 使用者名稱，從MediaWiki配置中獲取。
+	 * Logged-in user name from MediaWiki configuration.
 	 */
 	userName: string | null = mw.config.get("wgUserName");
 
 	/**
-	 * 頁面名稱，從MediaWiki配置中獲取。
+	 * Current page title from MediaWiki configuration.
 	 */
 	pageName: string = mw.config.get("wgPageName");
 
 	/**
-	 * 簡繁轉換函式，預設回傳繁體文本或錯誤訊息。
+	 * HanAssist converter; defaults to returning traditional text or an error string.
 	 */
 	convByVar: HanAssistConverter = (langDict) => langDict?.hant ?? langDict?.hans ?? "繁簡轉換未初始化，且 langDict 無效！";
 
 	/**
-	 * 版本號，用於在元件與頁面中顯示當前版本。
+	 * Gadget version from package.json for display/debugging.
 	 */
 	version: string = pkg.version;
 

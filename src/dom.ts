@@ -4,14 +4,14 @@ import { modifyPage, type ModifyPageRequest } from "./api";
 import { t, tReaction } from "./i18n";
 
 /**
- * 事件處理函式註冊表。WeakMap用於儲存事件處理函式的引用，以便在需要時可以移除它們。
+ * Registry for reaction event handlers. WeakMap stores handler references so they can be removed later.
  * @type {WeakMap<HTMLElement, Function>}
  * @private
  */
 const _handlerRegistry = new WeakMap<HTMLElement, EventListener>();
 
 /**
- * 按鈕對應的時間戳。WeakMap用於儲存按鈕與時間戳之間的關聯。
+ * Tracks the timestamp node associated with each button via WeakMap.
  * @type {WeakMap<HTMLElement, HTMLElement>}
  * @private
  */
@@ -22,6 +22,10 @@ interface ReactionCommentorEntry {
 	timestamp?: string;
 }
 
+/**
+ * Remove the registered event handler from an element and delete it from the registry.
+ * @param element {HTMLElement | null} - Element to remove the handler from.
+ */
 function removeRegisteredHandler(element: HTMLElement | null): void {
 	if (!element) {
 		return;
@@ -33,6 +37,11 @@ function removeRegisteredHandler(element: HTMLElement | null): void {
 	}
 }
 
+/**
+ * Extract the icon and counter elements from a reaction button.
+ * @param button {HTMLElement} - Reaction button element.
+ * @returns {{icon: HTMLElement, counter: HTMLElement} | null} - Object containing icon and counter elements, or null if missing.
+ */
 function getButtonParts(button: HTMLElement): { icon: HTMLElement; counter: HTMLElement } | null {
 	const icon = button.querySelector<HTMLElement>(".reaction-icon");
 	const counter = button.querySelector<HTMLElement>(".reaction-counter");
@@ -43,6 +52,12 @@ function getButtonParts(button: HTMLElement): { icon: HTMLElement; counter: HTML
 	return { icon, counter };
 }
 
+/**
+ * Get the reaction label from the button, prioritizing configured data attribute.
+ * @param button {HTMLElement} - Reaction button element.
+ * @param icon {HTMLElement} - Icon element within the button.
+ * @returns {string} - Reaction label.
+ */
 function getReactionLabel(button: HTMLElement, icon: HTMLElement): string {
 	const configuredIcon = button.getAttribute("data-reaction-icon")?.trim();
 	if (configuredIcon) {
@@ -51,6 +66,11 @@ function getReactionLabel(button: HTMLElement, icon: HTMLElement): string {
 	return icon.textContent?.trim() ?? "";
 }
 
+/**
+ * Get the timestamp string associated with a reaction button.
+ * @param button {HTMLElement} - Reaction button element.
+ * @returns {string | null} - Timestamp string or null if not found/parsable.
+ */
 function getTimestampString(button: HTMLElement): string | null {
 	const timestampElement = _buttonTimestamps.get(button);
 	if (!timestampElement) {
@@ -64,6 +84,11 @@ function getTimestampString(button: HTMLElement): string | null {
 	return parsedTimestamp;
 }
 
+/**
+ * Parse a legacy commentor entry string into a structured object.
+ * @param entry - Legacy commentor entry string.
+ * @returns Parsed ReactionCommentorEntry object.
+ */
 function parseLegacyCommentor(entry: string): ReactionCommentorEntry {
 	const trimmed = entry.trim();
 	if (!trimmed) {
@@ -79,10 +104,20 @@ function parseLegacyCommentor(entry: string): ReactionCommentorEntry {
 	return { user: trimmed };
 }
 
+/**
+ * Format a ReactionCommentorEntry into a legacy string representation.
+ * @param entry - ReactionCommentorEntry object.
+ * @returns Formatted legacy string.
+ */
 function formatLegacyCommentor(entry: ReactionCommentorEntry): string {
 	return entry.timestamp ? `${entry.user}於${entry.timestamp}` : entry.user;
 }
 
+/**
+ * Format a ReactionCommentorEntry for display in tooltips.
+ * @param entry - ReactionCommentorEntry object.
+ * @returns Formatted string for tooltip.
+ */
 function formatReactionTitleEntry(entry: ReactionCommentorEntry): string {
 	if (entry.timestamp) {
 		return t("dom.reactions.comment_stamp", [entry.user, entry.timestamp]);
@@ -90,6 +125,11 @@ function formatReactionTitleEntry(entry: ReactionCommentorEntry): string {
 	return entry.user;
 }
 
+/**
+ * Build the tooltip title for a reaction button based on its commentors.
+ * @param entries - Array of ReactionCommentorEntry objects.
+ * @returns Constructed tooltip title string.
+ */
 function buildReactionTitle(entries: ReactionCommentorEntry[]): string {
 	if (entries.length === 0) {
 		return t("dom.tooltips.no_reactions");
@@ -98,6 +138,11 @@ function buildReactionTitle(entries: ReactionCommentorEntry[]): string {
 	return t("dom.tooltips.reacted_to_comment", [list]);
 }
 
+/**
+ * Parse JSON-encoded commentor entries from a data attribute.
+ * @param json - JSON string from data attribute.
+ * @returns Array of ReactionCommentorEntry objects or null if parsing fails.
+ */
 function parseCommentorJson(json: string | null): ReactionCommentorEntry[] | null {
 	if (!json) {
 		return null;
@@ -125,6 +170,11 @@ function parseCommentorJson(json: string | null): ReactionCommentorEntry[] | nul
 	return null;
 }
 
+/**
+ * Get the reaction commentors from a button element.
+ * @param button - Reaction button element.
+ * @returns Array of ReactionCommentorEntry objects.
+ */
 function getReactionCommentors(button: HTMLElement): ReactionCommentorEntry[] {
 	const jsonEntries = parseCommentorJson(button.getAttribute("data-reaction-commentors-json"));
 	if (jsonEntries && jsonEntries.length > 0) {
@@ -137,6 +187,11 @@ function getReactionCommentors(button: HTMLElement): ReactionCommentorEntry[] {
 	return raw.split("/").map(parseLegacyCommentor).filter((entry) => entry.user);
 }
 
+/**
+ * Set the reaction commentors on a button element.
+ * @param button - Reaction button element.
+ * @param entries - Array of ReactionCommentorEntry objects.
+ */
 function setReactionCommentors(button: HTMLElement, entries: ReactionCommentorEntry[]): void {
 	if (entries.length === 0) {
 		button.removeAttribute("data-reaction-commentors");
@@ -149,6 +204,12 @@ function setReactionCommentors(button: HTMLElement, entries: ReactionCommentorEn
 	button.setAttribute("title", buildReactionTitle(entries));
 }
 
+/**
+ * Check if the user has reacted based on commentor entries.
+ * @param entries - Array of ReactionCommentorEntry objects.
+ * @param userName - User name to check.
+ * @returns True if the user has reacted, false otherwise.
+ */
 function hasUserReacted(entries: ReactionCommentorEntry[], userName: string | null): boolean {
 	if (!userName) {
 		return false;
@@ -156,6 +217,12 @@ function hasUserReacted(entries: ReactionCommentorEntry[], userName: string | nu
 	return entries.some((entry) => entry.user === userName);
 }
 
+/**
+ * Remove a user from the commentor entries.
+ * @param entries - Array of ReactionCommentorEntry objects.
+ * @param userName - User name to remove.
+ * @returns Updated array of ReactionCommentorEntry objects.
+ */
 function removeUserFromEntries(entries: ReactionCommentorEntry[], userName: string | null): ReactionCommentorEntry[] {
 	if (!userName) {
 		return entries;
@@ -169,25 +236,24 @@ function removeUserFromEntries(entries: ReactionCommentorEntry[], userName: stri
 	return updated;
 }
 
-
 /**
- * 處理反應按鈕的點擊事件，轉發到相應的處理函式。
- * @param button {HTMLElement} - 反應按鈕元素。
+ * Dispatch click events from any reaction button to the appropriate handler.
+ * @param button {HTMLElement} - Reaction button element.
  */
 function handleReactionClick(button: HTMLElement) {
 	if (button.classList.contains("reaction-new")) {
-		// 對於「新反應」按鈕，轉換為可編輯狀態。
+		// For "new reaction" buttons, enter editable mode.
 		addNewReaction(button);
 	} else {
 		if (button.getAttribute("data-reaction-icon-invalid")) {
-			// 如果反應圖示無效，不處理。
+			// Ignore buttons with invalid icons.
 			mw.notify(tReaction("dom.notify.invalid_icon"), { title: t("dom.titles.error"), type: "error" });
 			console.error("[Reaction] Invalid reaction icon.");
 			return;
 		}
 
 		if (window?.ujsReactionConfirmedRequired) {
-			// （手賤者專用）點擊普通反應按鈕時，確認是否要追加或取消反應。
+			// Optional confirmation for users who prefer manual prompts before toggling reactions.
 			const confirmMessage = button.classList.contains("reaction-reacted") ? tReaction("dom.confirm.remove") : tReaction("dom.confirm.add");
 			OO.ui.confirm(confirmMessage, {
 				title: t("dom.titles.confirm"), size: "small",
@@ -197,15 +263,15 @@ function handleReactionClick(button: HTMLElement) {
 				}
 			});
 		} else {
-			// （預設）不需要確認，直接切換反應狀態。
+			// Default behavior skips confirmation and toggles immediately.
 			toggleReaction(button);
 		}
 	}
 }
 
 /**
- * 切換普通反應按鈕（非「新反應」）的反應狀態。
- * @param button {HTMLElement} - 反應按鈕元素。
+ * Toggle a standard reaction button (not the "new reaction" button).
+ * @param button {HTMLElement} - Reaction button element.
  */
 function toggleReaction(button: HTMLElement) {
 	const parts = getButtonParts(button);
@@ -277,9 +343,9 @@ function toggleReaction(button: HTMLElement) {
 }
 
 /**
- * 取消新反應按鈕的編輯狀態。
- * @param button {HTMLElement} - 「新反應」按鈕元素。
- * @param event {MouseEvent|false} - 滑鼠點擊事件，false 表示不是瀏覽器觸發所以無需取消
+ * Cancel editing mode for the "new reaction" button.
+ * @param button {HTMLElement} - The "new reaction" button element.
+ * @param event {MouseEvent|false} - Mouse event or false when synthetic; non-browser triggers don't need cancellation.
  */
 function cancelNewReaction(button: HTMLElement, event: MouseEvent | false) {
 	if (event) {
@@ -311,9 +377,9 @@ function cancelNewReaction(button: HTMLElement, event: MouseEvent | false) {
 }
 
 /**
- * 儲存新的反應，並更新按鈕的狀態。
- * @param button {HTMLElement} - 「新反應」按鈕元素。
- * @param event {MouseEvent|false} - 滑鼠點擊事件，false 表示不是瀏覽器觸發所以無需取消
+ * Save a newly created reaction and update the button state.
+ * @param button {HTMLElement} - The "new reaction" button element.
+ * @param event {MouseEvent|false} - Mouse event or false when synthetic; non-browser triggers don't need cancellation.
  */
 function saveNewReaction(button: HTMLElement, event: MouseEvent | false) {
 	if (event) {
@@ -381,10 +447,10 @@ function saveNewReaction(button: HTMLElement, event: MouseEvent | false) {
 
 
 /**
- * 創建一個可調整大小的輸入框。
- * @param text {string} - 預設文字。
- * @param parent {HTMLElement} - 父元素。輸入框（以及隱藏的寬度計算器）將被添加到這個元素中。
- * @returns {HTMLInputElement} - 可調整大小的輸入框。
+ * Create a resizable input field.
+ * @param text {string} - Default text.
+ * @param parent {HTMLElement} - Parent node where the input (and hidden width calculator) will be added.
+ * @returns {HTMLInputElement} - Resizable input field.
  * @constructor
  */
 function ResizableInput(text: string = "", parent: HTMLElement = document.body || document.createElement("div")): HTMLInputElement {
@@ -428,8 +494,8 @@ function ResizableInput(text: string = "", parent: HTMLElement = document.body |
 }
 
 /**
- * 將「新反應」按鈕轉換為可編輯狀態，並加入「儲存」和「取消」選單。
- * @param button {HTMLElement} - 「新反應」按鈕元素。
+ * Convert the "new reaction" button into editable mode with save/cancel options.
+ * @param button {HTMLElement} - The "new reaction" button element.
  */
 function addNewReaction(button: HTMLElement) {
 	// Remove event handlers using the stored bound function reference.
@@ -482,8 +548,8 @@ function addNewReaction(button: HTMLElement) {
 }
 
 /**
- * 創建一個「新反應」按鈕。
- * @returns {HTMLSpanElement} - 「新反應」按鈕元素。
+ * Create a "new reaction" button element.
+ * @returns {HTMLSpanElement} - Newly created button element.
  * @constructor
  */
 function NewReactionButton() {
@@ -515,8 +581,8 @@ function NewReactionButton() {
 }
 
 /**
- * 綁定事件到普通反應按鈕（非「新反應」）。
- * @param button {HTMLElement} - 反應按鈕元素。
+ * Bind event handling to a regular reaction button (not the "new reaction" control).
+ * @param button {HTMLElement} - Reaction button element.
  */
 function bindEvent2ReactionButton(button: HTMLElement) {
 	// Create the bound function and store it in the WeakMap.
@@ -534,7 +600,7 @@ function bindEvent2ReactionButton(button: HTMLElement) {
 }
 
 /**
- * 處理回應按鈕 主程式。
+ * Entry point that wires reaction buttons into the page.
  */
 export function addReactionButtons() {
 	if (document.querySelector('#reaction-finished-loading')) {
@@ -544,7 +610,7 @@ export function addReactionButtons() {
 	const timestamps = document.querySelectorAll<HTMLAnchorElement>("a.ext-discussiontools-init-timestamplink");
 	const replyButtons = document.querySelectorAll<HTMLSpanElement>("span.ext-discussiontools-init-replylink-buttons");
 
-	// 尋找時間戳與回覆按鈕之間的所有反應按鈕
+	// Find all reaction buttons between the timestamp and reply areas.
 	for (let i = 0; i < timestamps.length; i++) {
 		let timestamp = timestamps[i];
 		let replyButton = replyButtons[i];

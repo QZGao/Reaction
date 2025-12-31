@@ -16,6 +16,8 @@ local TEXT = {
 }
 TEXT.tooltipNoReactions = TEXT.tooltipPrefixNoReactions .. TEXT.tooltipSuffix
 
+-- Attempt to interpret iconInput as a File: title and return a file link if it exists.
+-- Otherwise, return false.
 local function mayMakeFile(iconInput)
     local success, title = pcall(mw.title.new, iconInput)
     if success and title and title.namespace == 6 then
@@ -32,14 +34,14 @@ end
 
 local jsonEncode = mw.text.jsonEncode
 
+-- Determine the displayed reaction count based on user input and actual count.
 local function stripInputCount(inputCount, realCount)
     if inputCount ~= nil then
         inputCount = mw.text.trim(inputCount)
         if inputCount == "" then
             return "0"
         else
-            -- 示例使用了 99+ 所以這裡也允許尾隨 + 號
-            -- 順便把前導 0 也丟掉
+            -- Example input allows 99+, so keep the trailing plus and drop leading zeros.
             local num = mw.ustring.match(inputCount, "^0*(%d+%+?)$")
             if num then
                 return num
@@ -49,32 +51,34 @@ local function stripInputCount(inputCount, realCount)
     return tostring(realCount)
 end
 
+-- Remove all HTML tags from content.
 local function unstripHTML(content)
     content = mw.ustring.gsub(content, "%s*<[^>]+>%s*", "")
     return content
 end
 
+-- Custom unstrip function to keep whitelisted extension tags.
 local function unstripMarkersCustom(content)
     -- from [[Module:Check_for_unknown_parameters]] # local function clean
     content = mw.ustring.gsub(content, "(\127[^\127]*%-(%l+)%-[^\127]*\127)", function(fullTag, tag)
         if tag == 'nowiki' then
-            -- unstrip nowiki
+            -- unstrip nowiki content
             return mw.text.unstripNoWiki(fullTag)
         elseif tag == 'templatestyles' or tag == 'math' or tag == 'chem' then
-            -- 保留 templatestyles & 已確認和模板使用低機率會炸裂的標籤
+            -- keep templatestyles and low-risk extension tags that interact with templates
             return fullTag
         end
-        -- 其他通通拋棄
+        -- discard all other tags entirely
         return ""
     end)
     return content
 end
 
--- 取出所有 class 值並轉成二維陣列
+-- Extract all class attributes and return them as arrays of tokens.
 local function extractHTMLClassLists(input)
     local result = {}
 
-    -- 1) 有引號：class="..." 或 class='...'
+    -- 1) Quoted attributes: class="..." or class='...'
     for _, val in input:gmatch([[%f[%w]class%f[^%w]%s*=%s*(["'])(.-)%1]]) do
         local arr = {}
         for cls in val:gmatch("%S+") do
@@ -83,8 +87,8 @@ local function extractHTMLClassLists(input)
         result[#result + 1] = arr
     end
 
-    -- 2) 無引號：class=xxx（只到第一個分隔字元）
-    -- HTML 無引號屬性值不得包含空白 " ' = < > ` 等字元
+    -- 2) Unquoted attributes: class=xxx (stop at first delimiter)
+    -- HTML forbids whitespace or " ' = < > ` in unquoted values
     for val in input:gmatch([[%f[%w]class%f[^%w]%s*=%s*([^%s"'=<>`]+)]]) do
         result[#result + 1] = {val}
     end
@@ -93,6 +97,9 @@ local function extractHTMLClassLists(input)
 end
 
 local inArray
+
+-- Validate that for every occurrence of requiredClass, dependentClass is also present.
+-- Returns true if valid, false if a violation is found.
 local function validateClassDependency(input, requiredClass, dependentClass)
     if not inArray then
         inArray = require('Module:TableTools').inArray
@@ -106,6 +113,8 @@ local function validateClassDependency(input, requiredClass, dependentClass)
     return true
 end
 
+-- Format a single tooltip entry for a reaction.
+-- If timestamp is provided, include it.
 local function formatTooltipEntry(user, timestamp)
     if timestamp and timestamp ~= "" then
         return string.format(TEXT.tooltipStamp, user, timestamp)
@@ -113,6 +122,8 @@ local function formatTooltipEntry(user, timestamp)
     return user
 end
 
+-- Parse legacy reaction format from positional parameter.
+-- Returns user and timestamp (may be nil).
 local function parseLegacyReaction(entry)
     local trimmed = mw.text.trim(entry or "")
     if trimmed == "" then
@@ -144,6 +155,8 @@ local function trimOrNil(value)
     return trimmed
 end
 
+-- Collect reactions from parameters.
+-- Supports both named parameters (user1=..., ts1=...) and positional parameters.
 local function collectReactions(args, iconConsumesPositionalSlot)
     local reactions = {}
     local index = 1
@@ -205,11 +218,11 @@ function p._main(args)
     end
     local iconInvalid = false
     iconInput = mw.text.trim(iconInput)
-    if -- 已知幾乎無例外會大爆炸的案例（並且也明顯超出這個模板本來的用法）
+    if -- Known cases that reliably break the layout (and exceed intended usage)
     mw.ustring.find(iconInput, "<div[ >]") or mw.ustring.find(iconInput, "<table[ >]") or
         mw.ustring.find(iconInput, "<p[ >]") or mw.ustring.find(iconInput, "<li[ >]") or
         mw.ustring.find(iconInput, "\n") or mw.ustring.find(iconInput, "template%-reaction") or
-        -- 僅允許特意添加 zhwp-talkicon-reactionable 的圖標反應
+        -- Only allow zhwp-talkicon inputs that also carry the reactionable class
         (mw.ustring.find(iconInput, "zhwp%-talkicon") and
             not validateClassDependency(iconInput, 'zhwp-talkicon', 'zhwp-talkicon-reactionable')) then
         iconInvalid = true
@@ -218,10 +231,10 @@ function p._main(args)
     local iconData = unstripHTML(mw.text.unstrip(iconInput))
     local iconDisplay
     if not iconInvalid then
-        -- 這裡可以保留部分 mark 所以用自定義寫法
+        -- Custom unstrip to keep whitelisted marks
         iconDisplay = mayMakeFile(iconInput) or mw.text.trim(unstripMarkersCustom(iconInput))
         if iconDisplay == "" then
-            -- 只有被拋棄掉的 extension tag
+            -- Only discarded extension tags survived, treat as invalid
             iconDisplay = string.format('<span class="error">%s</span>', TEXT.iconInvalidMessage)
             iconInvalid = true
         end
@@ -230,7 +243,7 @@ function p._main(args)
     end
 
     local reactions = collectReactions(args, iconConsumesPositionalSlot)
-    local realReactionCount = #reactions -- 真實計數
+    local realReactionCount = #reactions -- actual count
     local reactionNames = {}
     local structuredReactions = {}
     for _, reaction in ipairs(reactions) do
@@ -247,7 +260,7 @@ function p._main(args)
     else
         reactionTitle = TEXT.tooltipNoReactions
     end
-    local reactionCount = stripInputCount(args.num, realReactionCount) -- 顯示的計數
+    local reactionCount = stripInputCount(args.num, realReactionCount) -- displayed count
 
     local out = mw.html.create('span'):addClass('reactionable'):addClass('template-reaction'):attr('title',
         reactionTitle):attr('data-reaction-commentors', table.concat(reactionNames, '/')):attr(
@@ -275,7 +288,7 @@ end
 function p.main(frame)
     local parent = frame:getParent()
     if not parent then
-        -- 不是模板被引用
+        -- Stop if the template wasn't invoked
         return ''
     end
 

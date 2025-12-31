@@ -23,12 +23,12 @@ interface RetrieveFullTextResponse {
 	};
 }
 
-// MediaWiki API 實例
+// MediaWiki API instance cache
 let apiInstance: mw.Api | null = null;
 
 /**
- * 獲取 MediaWiki API 實例。
- * @returns {mw.Api} - MediaWiki API 實例。
+ * Retrieve the shared MediaWiki API instance.
+ * @returns {mw.Api} - MediaWiki API instance.
  */
 function getApi(): mw.Api {
 	if (!apiInstance) {
@@ -67,10 +67,20 @@ interface ReactionTemplateMatch {
 	data: ReactionTemplateData;
 }
 
+/**
+ * Normalize an icon string by trimming whitespace.
+ * @param icon - Raw icon string.
+ * @returns Normalized icon string.
+ */
 function normalizeIcon(icon: string | undefined): string {
 	return (icon ?? "").trim();
 }
 
+/**
+ * Parse a legacy participant entry.
+ * @param entry - Raw participant string.
+ * @returns Parsed ReactionParticipant object.
+ */
 function parseLegacyParticipant(entry: string): ReactionParticipant {
 	const trimmed = entry.trim();
 	if (!trimmed) {
@@ -86,6 +96,11 @@ function parseLegacyParticipant(entry: string): ReactionParticipant {
 	return { user: trimmed };
 }
 
+/**
+ * Split template parameters while respecting nested structures.
+ * @param input - Raw template parameter string.
+ * @returns Array of individual parameter strings.
+ */
 function splitTemplateParameters(input: string): string[] {
 	const parts: string[] = [];
 	let current = "";
@@ -133,6 +148,11 @@ function splitTemplateParameters(input: string): string[] {
 	return parts;
 }
 
+/**
+ * Consume the icon parameter from the list of template parameters.
+ * @param params - Array of template parameter strings.
+ * @returns Object containing the icon value and whether it was positional.
+ */
 function consumeIconParameter(params: string[]): { icon: string; positional: boolean } {
 	if (params.length === 0) {
 		return { icon: "", positional: false };
@@ -172,6 +192,11 @@ function consumeIconParameter(params: string[]): { icon: string; positional: boo
 	return { icon: "", positional: false };
 }
 
+/**
+ * Parse a Reaction template text into structured data.
+ * @param templateText - Raw template text.
+ * @returns Parsed ReactionTemplateData or null if invalid.
+ */
 function parseReactionTemplateText(templateText: string): ReactionTemplateData | null {
 	const trimmed = templateText.trim();
 	if (!trimmed.startsWith("{{") || !trimmed.endsWith("}}")) {
@@ -252,6 +277,11 @@ function parseReactionTemplateText(templateText: string): ReactionTemplateData |
 	return { icon, participants, extraParams };
 }
 
+/**
+ * Serialize ReactionTemplateData back into template text.
+ * @param data - Structured ReactionTemplateData.
+ * @returns Serialized template text.
+ */
 function serializeReactionTemplate(data: ReactionTemplateData): string {
 	const parts: string[] = ["{{Reaction", data.icon];
 	data.extraParams.forEach(({ key, value }) => {
@@ -268,6 +298,12 @@ function serializeReactionTemplate(data: ReactionTemplateData): string {
 	return parts.join("|");
 }
 
+/**
+ * Find the end index of a template starting from a given position.
+ * @param text - Full text.
+ * @param startIndex - Starting index of the template (position of "{{").
+ * @returns Index of the character after the closing "}}" or -1 if not found.
+ */
 function findTemplateEnd(text: string, startIndex: number): number {
 	let depth = 0;
 	for (let i = startIndex; i < text.length - 1; i++) {
@@ -288,6 +324,11 @@ function findTemplateEnd(text: string, startIndex: number): number {
 	return -1;
 }
 
+/**
+ * Find all Reaction templates in a line of text.
+ * @param line - Line of text.
+ * @returns Array of ReactionTemplateMatch objects.
+ */
 function findReactionTemplates(line: string): ReactionTemplateMatch[] {
 	const matches: ReactionTemplateMatch[] = [];
 	let index = 0;
@@ -315,10 +356,25 @@ function findReactionTemplates(line: string): ReactionTemplateMatch[] {
 	return matches;
 }
 
+/**
+ * Replace a range of text in a line with a replacement string.
+ * @param line - Original line of text.
+ * @param start - Start index of the range to replace.
+ * @param end - End index of the range to replace.
+ * @param replacement - Replacement string.
+ * @returns Modified line of text.
+ */
 function replaceRange(line: string, start: number, end: number, replacement: string): string {
 	return line.slice(0, start) + replacement + line.slice(end);
 }
 
+/**
+ * Remove a template from a line of text, adjusting surrounding whitespace.
+ * @param line - Original line of text.
+ * @param start - Start index of the template.
+ * @param end - End index of the template.
+ * @returns Modified line of text.
+ */
 function removeTemplateFromLine(line: string, start: number, end: number): string {
 	let before = line.slice(0, start);
 	let after = line.slice(end);
@@ -334,6 +390,12 @@ function removeTemplateFromLine(line: string, start: number, end: number): strin
 	return before + (needsSpace ? " " : "") + after;
 }
 
+/**
+ * Find a Reaction template by its icon.
+ * @param templates - Array of ReactionTemplateMatch objects.
+ * @param icon - Icon string to search for.
+ * @returns Matching ReactionTemplateMatch or undefined if not found.
+ */
 function findTemplateByIcon(templates: ReactionTemplateMatch[], icon: string | undefined): ReactionTemplateMatch | undefined {
 	if (!icon) {
 		return undefined;
@@ -342,6 +404,13 @@ function findTemplateByIcon(templates: ReactionTemplateMatch[], icon: string | u
 	return templates.find((template) => normalizeIcon(template.data.icon) === normalized);
 }
 
+/**
+ * Remove a reaction from a line of text.
+ * @param line - Line of text.
+ * @param icon - Icon string of the reaction to remove.
+ * @param userName - User name of the participant to remove.
+ * @returns Object containing modified text and whether a change was made.
+ */
 function removeReactionFromLine(line: string, icon: string | undefined, userName: string | null): { text: string; modified: boolean } {
 	if (!icon || !userName) {
 		return { text: line, modified: false };
@@ -369,6 +438,14 @@ function removeReactionFromLine(line: string, icon: string | undefined, userName
 	};
 }
 
+/**
+ * Add a reaction to a line of text.
+ * @param line - Line of text.
+ * @param icon - Icon string of the reaction to add.
+ * @param userName - User name of the participant to add.
+ * @param timestamp - Timestamp string for the participant.
+ * @returns Object containing modified text and whether a change was made.
+ */
 function addReactionToLine(
 	line: string,
 	icon: string | undefined,
@@ -394,6 +471,14 @@ function addReactionToLine(
 	};
 }
 
+/**
+ * Append a new Reaction template to a line of text.
+ * @param line - Line of text.
+ * @param icon - Icon string of the reaction to append.
+ * @param userName - User name of the participant to add.
+ * @param timestamp - Timestamp string for the participant.
+ * @returns Object containing modified text and whether a change was made.
+ */
 function appendReactionTemplate(
 	line: string,
 	icon: string | undefined,
@@ -421,8 +506,8 @@ function appendReactionTemplate(
 }
 
 /**
- * 獲取完整的wikitext。
- * @returns {Promise<string>} 包含完整wikitext的Promise。
+ * Fetch the complete wikitext for the current page.
+ * @returns {Promise<string>} Promise resolving to the page wikitext.
  */
 async function retrieveFullText(): Promise<string> {
 	const response = await getApi().get({
@@ -441,10 +526,10 @@ async function retrieveFullText(): Promise<string> {
 }
 
 /**
- * 儲存完整的wikitext。
- * @param fulltext {string} - 完整的wikitext。
- * @param summary {string} - 編輯摘要。
- * @returns {Promise<boolean>} - 操作成功與否的Promise。
+ * Save a full wikitext snapshot.
+ * @param fulltext {string} - Wikitext payload to save.
+ * @param summary {string} - Edit summary.
+ * @returns {Promise<boolean>} - Promise indicating success.
  */
 async function saveFullText(fulltext: string, summary: string): Promise<boolean> {
 	try {
@@ -465,11 +550,10 @@ async function saveFullText(fulltext: string, summary: string): Promise<boolean>
 	}
 }
 
-
 /**
- * 修改頁面內容。
- * @param mod {Object} - 修改內容的物件，包含時間戳（timestamp）、要添加或刪除的反應等（upvote、downvote、append、remove）。
- * @returns {Promise<boolean>} - 操作成功與否的Promise。
+ * Modify the page content according to the requested change set.
+ * @param mod {Object} - Fields describing the change (timestamp plus upvote/downvote/append/remove instructions).
+ * @returns {Promise<boolean>} - Promise indicating success.
  */
 export async function modifyPage(mod: ModifyPageRequest): Promise<boolean> {
 	let fulltext: string;
@@ -543,7 +627,7 @@ export async function modifyPage(mod: ModifyPageRequest): Promise<boolean> {
 			throw new Error(tReaction("api.errors.no_changes"));
 		}
 
-		// 儲存全文。錯誤資訊已在函式內處理。
+		// Save the full text; errors are surfaced inside saveFullText().
 		return await saveFullText(newFulltext, summary);
 
 	} catch (error: unknown) {
