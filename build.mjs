@@ -58,46 +58,47 @@ export default catalogues;
 };
 
 const createBuildOptions = () => {
-    const timestamp = new Date().toISOString();
-    return {
-        entryPoints: [path.join(__dirname, 'src', 'main.ts')],
-        outfile: path.join(__dirname, 'dist', 'bundled.js'),
-        bundle: true,
-        format: 'iife',
-        charset: 'utf8',
-        target: ['es2017'],
-        minify: false,
-        sourcemap: false,
-        plugins: [i18nCatalogPlugin],
-        // Tell esbuild to load CSS files as text so they're bundled into the JS
-        loader: {
-            '.css': 'text'
-        },
-        banner: {
-            js: `// [[User:SuperGrey/gadgets/Reaction]]
-// Maintainer: SuperGrey
+	const timestamp = new Date().toISOString();
+	return {
+		entryPoints: [path.join(__dirname, 'src', 'main.ts')],
+		outfile: path.join(__dirname, 'dist', 'bundled.js'),
+		bundle: true,
+		format: 'iife',
+		charset: 'utf8',
+		target: ['es2017'],
+		minify: false,
+		sourcemap: false,
+		plugins: [i18nCatalogPlugin],
+		// Tell esbuild to load CSS files as text so they're bundled into the JS
+		loader: {
+			'.css': 'text'
+		},
+		banner: {
+			js: `// Reaction - Bundled Version
+// Maintainers: SuperGrey, SunAfterRain
+// Repository: https://github.com/QZGao/Reaction
 // Release: ${pkgJson.version}
 // Timestamp: ${timestamp}
 // <nowiki>`
-        },
-        footer: { js: '// </nowiki>' },
-        logLevel: 'info',
-    };
+		},
+		footer: { js: '// </nowiki>' },
+		logLevel: 'info',
+	};
 };
 
 (async () => {
-    try {
-        const buildOptions = createBuildOptions();
-        if (watch) {
-            const ctx = await esbuild.context(buildOptions);
-            await ctx.watch();
-            console.log('[Reaction build] Watching for changes...');
-        } else {
-            await esbuild.build(buildOptions);
-            console.log('[Reaction build] Build complete');
-        }
-    } catch (e) {
-        console.error('[Reaction build] Build failed:', e);
-        process.exit(1);
-    }
+	try {
+		const buildOptions = createBuildOptions();
+		if (watch) {
+			const ctx = await esbuild.context(buildOptions);
+			await ctx.watch();
+			console.log('[Reaction build] Watching for changes...');
+		} else {
+			await esbuild.build(buildOptions);
+			console.log('[Reaction build] Build complete');
+		}
+	} catch (e) {
+		console.error('[Reaction build] Build failed:', e);
+		process.exit(1);
+	}
 })();

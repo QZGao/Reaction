@@ -1,8 +1,20 @@
 -- This module implements {{Reaction}}.
 -- Maintainers: SunAfterRain, SuperGrey
+-- Repository: https://github.com/QZGao/Reaction
 -- <nowiki>
 local p = {}
 local mIfexist
+
+-- Centralized text constants for the on-wiki fallback UI.
+local TEXT = {
+    iconInvalidMessage = "不-{zh-hans:支持;zh-hant:支援;}-輸入的圖標",
+    tooltipSeparator = "、",
+    tooltipSuffix = "回应了这条留言",
+    tooltipStamp = "%s於%s",
+    tooltipPrefixNoReactions = "没有人",
+    legacySeparatorPattern = "^(.-)[於于]%s*(.+)$"
+}
+TEXT.tooltipNoReactions = TEXT.tooltipPrefixNoReactions .. TEXT.tooltipSuffix
 
 local function mayMakeFile(iconInput)
     local success, title = pcall(mw.title.new, iconInput)
@@ -17,6 +29,8 @@ local function mayMakeFile(iconInput)
     end
     return false
 end
+
+local jsonEncode = mw.text.jsonEncode
 
 local function stripInputCount(inputCount, realCount)
     if inputCount ~= nil then
@@ -92,10 +106,103 @@ local function validateClassDependency(input, requiredClass, dependentClass)
     return true
 end
 
-local iconInvalidDisplay = "<span class=\"error\">不-{zh-hans:支持;zh-hant:支援;}-輸入的圖標</span>"
+local function formatTooltipEntry(user, timestamp)
+    if timestamp and timestamp ~= "" then
+        return string.format(TEXT.tooltipStamp, user, timestamp)
+    end
+    return user
+end
+
+local function parseLegacyReaction(entry)
+    local trimmed = mw.text.trim(entry or "")
+    if trimmed == "" then
+        return nil, nil
+    end
+    local user, timestamp = mw.ustring.match(trimmed, TEXT.legacySeparatorPattern)
+    if user then
+        user = mw.text.trim(user)
+        timestamp = mw.text.trim(timestamp)
+        if user == "" then
+            user = trimmed
+        end
+        if timestamp == "" then
+            timestamp = nil
+        end
+        return user, timestamp
+    end
+    return trimmed, nil
+end
+
+local function trimOrNil(value)
+    if value == nil then
+        return nil
+    end
+    local trimmed = mw.text.trim(value)
+    if trimmed == "" then
+        return nil
+    end
+    return trimmed
+end
+
+local function collectReactions(args, iconConsumesPositionalSlot)
+    local reactions = {}
+    local index = 1
+    local positionalOffset = iconConsumesPositionalSlot and 1 or 0
+    while true do
+        local userParam = trimOrNil(args["user" .. index])
+        local timestampParam = trimOrNil(args["ts" .. index] or args["timestamp" .. index])
+        if not timestampParam and index == 1 then
+            timestampParam = trimOrNil(args.ts or args.timestamp)
+        end
+        local positionalValue = trimOrNil(args[index + positionalOffset])
+        if not positionalValue and positionalOffset ~= 1 then
+            positionalValue = trimOrNil(args[index + 1])
+        end
+
+        if not userParam and not timestampParam and not positionalValue then
+            break
+        end
+
+        local user = userParam
+        local timestamp = timestampParam
+
+        if (not user or user == "") and positionalValue then
+            local legacyUser, legacyTimestamp = parseLegacyReaction(positionalValue)
+            if legacyUser and legacyUser ~= "" then
+                user = legacyUser
+                if not timestamp and legacyTimestamp and legacyTimestamp ~= "" then
+                    timestamp = legacyTimestamp
+                end
+            else
+                user = positionalValue
+            end
+        end
+
+        if user and user ~= "" then
+            reactions[#reactions + 1] = {
+                user = user,
+                timestamp = timestamp
+            }
+        end
+        index = index + 1
+    end
+    return reactions
+end
 
 function p._main(args)
-    local iconInput = args[1] or "👍"
+    local iconConsumesPositionalSlot = false
+    local iconInput = trimOrNil(args.icon)
+    if iconInput then
+        iconInput = mw.text.trim(iconInput)
+    else
+        local positionalIcon = trimOrNil(args[1])
+        if positionalIcon then
+            iconInput = positionalIcon
+            iconConsumesPositionalSlot = true
+        else
+            iconInput = "👍"
+        end
+    end
     local iconInvalid = false
     iconInput = mw.text.trim(iconInput)
     if -- 已知幾乎無例外會大爆炸的案例（並且也明顯超出這個模板本來的用法）
@@ -115,34 +222,38 @@ function p._main(args)
         iconDisplay = mayMakeFile(iconInput) or mw.text.trim(unstripMarkersCustom(iconInput))
         if iconDisplay == "" then
             -- 只有被拋棄掉的 extension tag
-            iconDisplay = iconInvalidDisplay
+            iconDisplay = string.format('<span class="error">%s</span>', TEXT.iconInvalidMessage)
             iconInvalid = true
         end
     else
-        iconDisplay = iconInvalidDisplay
+        iconDisplay = string.format('<span class="error">%s</span>', TEXT.iconInvalidMessage)
     end
 
-    local reactions = {}
-    while true do
-        local currentItem = args[1 + #reactions + 1] -- 反應者從第二個參數開始
-        if currentItem == nil then
-            break
-        end
-        currentItem = mw.text.trim(currentItem)
-        if currentItem == '' then
-            break
-        end
-        table.insert(reactions, currentItem)
-    end
+    local reactions = collectReactions(args, iconConsumesPositionalSlot)
     local realReactionCount = #reactions -- 真實計數
-    local reactionTitle = (realReactionCount >= 1 and mw.text.listToText(reactions, '、', '、') or '没有人') ..
-                              '回应了这条留言'
+    local reactionNames = {}
+    local structuredReactions = {}
+    for _, reaction in ipairs(reactions) do
+        reactionNames[#reactionNames + 1] = formatTooltipEntry(reaction.user, reaction.timestamp)
+        structuredReactions[#structuredReactions + 1] = {
+            user = reaction.user,
+            timestamp = reaction.timestamp
+        }
+    end
+    local reactionTitle
+    if realReactionCount >= 1 then
+        local list = mw.text.listToText(reactionNames, TEXT.tooltipSeparator, TEXT.tooltipSeparator)
+        reactionTitle = list .. TEXT.tooltipSuffix
+    else
+        reactionTitle = TEXT.tooltipNoReactions
+    end
     local reactionCount = stripInputCount(args.num, realReactionCount) -- 顯示的計數
 
     local out = mw.html.create('span'):addClass('reactionable'):addClass('template-reaction'):attr('title',
-        reactionTitle):attr('data-reaction-commentors', table.concat(reactions, '/')):attr('data-reaction-icon',
-        iconData):attr('data-reaction-icon-invalid', iconInvalid and "" or nil):attr('data-reaction-count',
-        reactionCount):attr('data-reaction-real-count', realReactionCount)
+        reactionTitle):attr('data-reaction-commentors', table.concat(reactionNames, '/')):attr(
+        'data-reaction-commentors-json', jsonEncode(structuredReactions)):attr('data-reaction-icon', iconData):attr(
+        'data-reaction-icon-invalid', iconInvalid and "" or nil):attr('data-reaction-count', reactionCount):attr(
+        'data-reaction-real-count', realReactionCount)
 
     local content = out:tag('span'):addClass('reaction-content')
 

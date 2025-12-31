@@ -17,11 +17,13 @@
   "dom.errors.missing_timestamp": "Failed! Unable to obtain the timestamp.",
   "dom.errors.unowned_reaction": "Failed! You cannot remove a reaction you never made.",
   "dom.notify.invalid_icon": "Invalid reaction icon; the gadget cannot process it.",
-  "dom.reactions.comment_stamp": "$1於$2",
+  "dom.reactions.comment_stamp": "$1 at $2",
   "dom.reactions.label": "Reaction",
+  "dom.reactions.list_separator": ", ",
   "dom.titles.confirm": "Confirm",
   "dom.titles.error": "Error",
-  "dom.tooltips.reacted_to_comment": "$1於$2回應了這條留言",
+  "dom.tooltips.no_reactions": "No one has responded to this comment yet.",
+  "dom.tooltips.reacted_to_comment": "$1 responded to this comment.",
   "main.notifications.hanassist_failed": "Failed! The HanAssist gadget could not be loaded.",
   "main.titles.error": "Error"
 }

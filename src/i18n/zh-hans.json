@@ -19,9 +19,11 @@
   "dom.notify.invalid_icon": "反应图示无效，小工具无法处理。",
   "dom.reactions.comment_stamp": "$1于$2",
   "dom.reactions.label": "反应",
+  "dom.reactions.list_separator": "、",
   "dom.titles.confirm": "确认",
   "dom.titles.error": "错误",
-  "dom.tooltips.reacted_to_comment": "$1于$2回应了这条留言",
+  "dom.tooltips.no_reactions": "没有人回应这条留言",
+  "dom.tooltips.reacted_to_comment": "$1回应了这条留言",
   "main.notifications.hanassist_failed": "失败！简繁转换模组未能载入。",
   "main.titles.error": "错误"
 }
