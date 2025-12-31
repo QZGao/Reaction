@@ -9,6 +9,54 @@ const __dirname = path.dirname(__filename);
 const watch = process.argv.includes('--watch');
 const pkgJson = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
+const I18N_VIRTUAL_ID = 'virtual:i18n-catalogues';
+const i18nDir = path.join(__dirname, 'src', 'i18n');
+
+const i18nCatalogPlugin = {
+	name: 'i18n-catalogues',
+	setup(build) {
+		build.onResolve({ filter: new RegExp(`^${I18N_VIRTUAL_ID}$`) }, () => ({
+			path: I18N_VIRTUAL_ID,
+			namespace: 'i18n'
+		}));
+
+		build.onLoad({ filter: /.*/, namespace: 'i18n' }, async () => {
+			const entries = await fs.promises.readdir(i18nDir, { withFileTypes: true });
+			const jsonFiles = entries
+				.filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+				.map((entry) => entry.name)
+				.sort();
+
+			const imports = jsonFiles
+				.map((file, index) => `import locale${index} from './${file}';`)
+				.join('\n');
+
+			const mappings = jsonFiles
+				.map((file, index) => {
+					const locale = path.basename(file, '.json');
+					return `\t${JSON.stringify(locale)}: locale${index}`;
+				})
+				.join(',\n');
+
+			const contents = `${imports}
+const catalogues = {
+${mappings}
+};
+
+export default catalogues;
+`;
+
+			return {
+				contents,
+				loader: 'ts',
+				resolveDir: i18nDir,
+				watchFiles: jsonFiles.map((file) => path.join(i18nDir, file)),
+				watchDirs: [i18nDir]
+			};
+		});
+	}
+};
+
 const createBuildOptions = () => {
     const timestamp = new Date().toISOString();
     return {
@@ -20,6 +68,7 @@ const createBuildOptions = () => {
         target: ['es2017'],
         minify: false,
         sourcemap: false,
+        plugins: [i18nCatalogPlugin],
         // Tell esbuild to load CSS files as text so they're bundled into the JS
         loader: {
             '.css': 'text'

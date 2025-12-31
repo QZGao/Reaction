@@ -25,6 +25,10 @@ interface RetrieveFullTextResponse {
 // MediaWiki API 實例
 let apiInstance: mw.Api | null = null;
 
+/**
+ * 獲取 MediaWiki API 實例。
+ * @returns {mw.Api} - MediaWiki API 實例。
+ */
 function getApi(): mw.Api {
     if (!apiInstance) {
         apiInstance = new mw.Api({
