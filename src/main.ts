@@ -1,8 +1,6 @@
 import state from "./state";
 import {addReactionButtons} from "./dom";
 
-declare var mw: any;
-
 /**
  * 初始化函式，載入所需的模組和事件綁定。
  */

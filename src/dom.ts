@@ -2,10 +2,6 @@ import state from "./state";
 import {atChineseUtcRegex, getCurrentChineseUtc, parseTimestamp, userNameAtChineseUtcRegex} from "./utils";
 import {modifyPage} from "./api";
 
-declare var mw: any;
-declare var window: any;
-
-
 /**
  * 事件處理函式註冊表。WeakMap用於儲存事件處理函式的引用，以便在需要時可以移除它們。
  * @type {WeakMap<HTMLElement, Function>}

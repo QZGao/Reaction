@@ -1,15 +1,16 @@
 import state from "./state";
-import {escapeRegex, getCurrentChineseUtc, userNameAtChineseUtcRegex} from "./utils";
-
-
-declare var mw: any;
+import { escapeRegex, getCurrentChineseUtc, userNameAtChineseUtcRegex } from "./utils";
 
 // MediaWiki API 實例
 let _api: any = null;
 
 function getApi() {
     if (!_api) {
-        _api = new mw.Api({'User-Agent': 'Reaction/1.0.0'});
+        _api = new mw.Api({
+            ajax: {
+                headers: { 'User-Agent': `Reaction/${state.version}` }
+            }
+        });
     }
     return _api;
 }
@@ -40,7 +41,7 @@ async function saveFullText(fulltext, summary) {
             text: fulltext,
             summary: summary + " ([[User:SuperGrey/gadgets/Reaction|Reaction]])",
         });
-        mw.notify(state.convByVar({hant: "[Reaction] 儲存成功！", hans: "[Reaction] 保存成功！"}), {
+        mw.notify(state.convByVar({ hant: "[Reaction] 儲存成功！", hans: "[Reaction] 保存成功！" }), {
             title: "成功", type: "success",
         });
         return true;
@@ -48,7 +49,7 @@ async function saveFullText(fulltext, summary) {
         console.error(e);
         mw.notify(state.convByVar({
             hant: "[Reaction] 失敗！無法儲存頁面。", hans: "[Reaction] 失败！无法保存页面。",
-        }), {title: state.convByVar({hant: "錯誤", hans: "错误"}), type: "error"});
+        }), { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
         return false;
     }
 }
@@ -67,7 +68,7 @@ export async function modifyPage(mod) {
         console.error(e);
         mw.notify(state.convByVar({
             hant: "[Reaction] 失敗！無法獲取頁面內容。", hans: "[Reaction] 失败！无法获取页面内容。",
-        }), {title: state.convByVar({hant: "錯誤", hans: "错误"}), type: "error"});
+        }), { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
         return false;
     }
 
@@ -161,7 +162,7 @@ export async function modifyPage(mod) {
 
     } catch (e) {
         console.error(e);
-        mw.notify(e.message, {title: state.convByVar({hant: "錯誤", hans: "错误"}), type: "error"});
+        mw.notify(e.message, { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
         return false;
     }
 }

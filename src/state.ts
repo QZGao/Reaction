@@ -1,4 +1,4 @@
-declare var mw: any;
+import pkg from '../package.json';
 
 /**
  * 全局狀態管理。
@@ -33,6 +33,9 @@ class State {
             this.convByVar = convByVar;
         }
     }
+
+    // 版本號，用於在元件與頁面中顯示當前版本
+    version: string = pkg.version;
 }
 
 export const state = new State();

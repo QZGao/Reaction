@@ -1,7 +1,5 @@
 import state from "./state";
 
-
-declare var mw: any;
 /**
  * 正則表達式，用於匹配中文格式的UTC時間戳。
  * @type {string}
