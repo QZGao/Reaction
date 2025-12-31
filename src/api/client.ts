@@ -41,13 +41,14 @@ export function getApi(): mw.Api {
 }
 
 /**
- * Fetch the complete wikitext for the current page.
- * @returns Promise resolving to the page wikitext.
+ * Fetch the current page wikitext.
+ * @param title - Optional page title override.
+ * @returns Raw page wikitext or null if unavailable.
  */
-export async function retrieveFullText(): Promise<string> {
+export async function fetchPageWikitext(title?: string): Promise<string | null> {
 	const response = await getApi().get({
 		action: "query",
-		titles: state.pageName,
+		titles: title ?? state.pageName,
 		prop: "revisions",
 		rvslots: "*",
 		rvprop: "content",
@@ -56,8 +57,18 @@ export async function retrieveFullText(): Promise<string> {
 	const pageId = response.query.pageids[0];
 	const page = response.query.pages[pageId];
 	const revision = page?.revisions?.[0];
-	const fulltext = revision?.slots?.main?.["*"] ?? "";
-	return `${fulltext}\n`;
+	const slot = revision?.slots?.main;
+	const content = slot?.["*"] ?? (slot as { content?: string } | undefined)?.content ?? null;
+	return typeof content === "string" ? content : null;
+}
+
+/**
+ * Fetch the complete wikitext for the current page.
+ * @returns Promise resolving to the page wikitext.
+ */
+export async function retrieveFullText(): Promise<string> {
+	const fulltext = await fetchPageWikitext();
+	return `${fulltext ?? ""}\n`;
 }
 
 /**

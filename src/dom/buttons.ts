@@ -685,7 +685,7 @@ function processReactionRoot(root: ReactionRoot, matchingState: DiscussionToolsM
 	for (let i = 0; i < pairCount; i++) {
 		const timestamp = timestamps[i];
 		const replyButton = replyButtons[i];
-		if (isInPreview(timestamp) || isInPreview(replyButton)) {
+		if (isInExcludedArea(timestamp) || isInExcludedArea(replyButton)) {
 			continue;
 		}
 		const matchedComment = assignCommentMetadata(timestamp, matchingState);
@@ -707,7 +707,7 @@ function processReactionRoot(root: ReactionRoot, matchingState: DiscussionToolsM
 	for (let i = 0; i < pairCount; i++) {
 		const replyButton = replyButtons[i];
 		const timestamp = timestamps[i] ?? null;
-		if (isInPreview(replyButton) || isInPreview(timestamp)) {
+		if (isInExcludedArea(replyButton) || isInExcludedArea(timestamp)) {
 			continue;
 		}
 		if (replyButton instanceof HTMLElement && insertNewReactionBefore(replyButton, timestamp)) {
@@ -719,20 +719,30 @@ function processReactionRoot(root: ReactionRoot, matchingState: DiscussionToolsM
 	return insertedButtons;
 }
 
-const PREVIEW_EXCLUDE_SELECTOR = [
+const PREVIEW_EXCLUDE_SELECTORS = [
 	".preview",
 	".cd-commentForm-previewArea",
 	".ext-discussiontools-ui-replyWidget-preview",
 	'[data-label="Preview"]',
-].join(", ");
+];
+
+const DISCUSSION_EXCLUDE_SELECTORS = [
+	".mw-archivedtalk",
+	".mw-notalk",
+	"blockquote",
+	"cite",
+	"q",
+];
+
+const EXCLUDED_AREA_SELECTOR = [...PREVIEW_EXCLUDE_SELECTORS, ...DISCUSSION_EXCLUDE_SELECTORS].join(", ");
 
 /**
- * Check if an element is inside a preview area.
+ * Check if an element is inside a preview or excluded area.
  * @param element {Element | null | undefined} - Element to check.
- * @returns {boolean} - True if inside a preview area, false otherwise.
+ * @returns {boolean} - True if inside an excluded area, false otherwise.
  */
-function isInPreview(element: Element | null | undefined): boolean {
-	return Boolean(element?.closest(PREVIEW_EXCLUDE_SELECTOR));
+function isInExcludedArea(element: Element | null | undefined): boolean {
+	return Boolean(element?.closest(EXCLUDED_AREA_SELECTOR));
 }
 
 /**
@@ -781,7 +791,7 @@ function insertNewReactionBefore(target: HTMLElement, timestamp?: HTMLElement | 
 	if (!target.parentNode) {
 		return false;
 	}
-	if (isInPreview(target)) {
+	if (isInExcludedArea(target)) {
 		return false;
 	}
 	const previousSibling = target.previousElementSibling as HTMLElement | null;
@@ -813,7 +823,7 @@ function processConvenientDiscussionMenus(root: ReactionRoot): number {
 	);
 	let inserted = 0;
 	for (const comment of commentParts) {
-		if (isInPreview(comment)) {
+		if (isInExcludedArea(comment)) {
 			continue;
 		}
 		const menuWrapper = comment.querySelector<HTMLElement>(".cd-comment-menu-wrapper");
@@ -851,13 +861,16 @@ export async function addReactionButtons(containers?: ReactionRoot | ReactionRoo
 
 	let totalInserted = 0;
 	for (const root of roots) {
+		if (root instanceof Element && isInExcludedArea(root)) {
+			continue;
+		}
 		totalInserted += processReactionRoot(root, matchingState);
 		const reactionButtons = Array.from(root.querySelectorAll(".template-reaction[data-reaction-commentors]"));
 		for (const element of reactionButtons) {
 			if (!(element instanceof HTMLElement)) {
 				continue;
 			}
-			if (isInPreview(element)) {
+			if (isInExcludedArea(element)) {
 				continue;
 			}
 			let timestampElement = _buttonTimestamps.get(element);
