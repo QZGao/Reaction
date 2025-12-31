@@ -1,30 +1,67 @@
 import state from "./state";
 import { escapeRegex, getCurrentChineseUtc, userNameAtChineseUtcRegex } from "./utils";
 
-// MediaWiki API 實例
-let _api: any = null;
+interface RevisionSlot {
+    main: {
+        "*": string;
+    };
+}
 
-function getApi() {
-    if (!_api) {
-        _api = new mw.Api({
+interface Revision {
+    slots: RevisionSlot;
+}
+
+interface QueryPage {
+    revisions: Revision[];
+}
+
+interface RetrieveFullTextResponse {
+    query: {
+        pageids: string[];
+        pages: Record<string, QueryPage>;
+    };
+}
+
+// MediaWiki API 實例
+let apiInstance: mw.Api | null = null;
+
+function getApi(): mw.Api {
+    if (!apiInstance) {
+        apiInstance = new mw.Api({
             ajax: {
-                headers: { 'User-Agent': `Reaction/${state.version}` }
+                headers: { "User-Agent": `Reaction/${state.version}` }
             }
         });
     }
-    return _api;
+    return apiInstance;
+}
+
+export interface ModifyPageRequest {
+    timestamp: string;
+    upvote?: string;
+    downvote?: string;
+    append?: string;
+    remove?: string;
 }
 
 /**
  * 獲取完整的wikitext。
  * @returns {Promise<string>} 包含完整wikitext的Promise。
  */
-async function retrieveFullText() {
-    let response = await getApi().get({
-        action: 'query', titles: state.pageName, prop: 'revisions', rvslots: '*', rvprop: 'content', indexpageids: 1,
-    });
-    let fulltext = response.query.pages[response.query.pageids[0]].revisions[0].slots.main['*'];
-    return fulltext + "\n";
+async function retrieveFullText(): Promise<string> {
+    const response = await getApi().get({
+        action: "query",
+        titles: state.pageName,
+        prop: "revisions",
+        rvslots: "*",
+        rvprop: "content",
+        indexpageids: 1,
+    }) as RetrieveFullTextResponse;
+    const pageId = response.query.pageids[0];
+    const page = response.query.pages[pageId];
+    const revision = page?.revisions?.[0];
+    const fulltext = revision?.slots?.main?.["*"] ?? "";
+    return `${fulltext}\n`;
 }
 
 /**
@@ -33,10 +70,10 @@ async function retrieveFullText() {
  * @param summary {string} - 編輯摘要。
  * @returns {Promise<boolean>} - 操作成功與否的Promise。
  */
-async function saveFullText(fulltext, summary) {
+async function saveFullText(fulltext: string, summary: string): Promise<boolean> {
     try {
-        await getApi().postWithToken('edit', {
-            action: 'edit',
+        await getApi().postWithToken("edit", {
+            action: "edit",
             title: state.pageName,
             text: fulltext,
             summary: summary + " ([[User:SuperGrey/gadgets/Reaction|Reaction]])",
@@ -45,8 +82,8 @@ async function saveFullText(fulltext, summary) {
             title: "成功", type: "success",
         });
         return true;
-    } catch (e) {
-        console.error(e);
+    } catch (error) {
+        console.error(error);
         mw.notify(state.convByVar({
             hant: "[Reaction] 失敗！無法儲存頁面。", hans: "[Reaction] 失败！无法保存页面。",
         }), { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
@@ -60,19 +97,19 @@ async function saveFullText(fulltext, summary) {
  * @param mod {Object} - 修改內容的物件，包含時間戳（timestamp）、要添加或刪除的反應等（upvote、downvote、append、remove）。
  * @returns {Promise<boolean>} - 操作成功與否的Promise。
  */
-export async function modifyPage(mod) {
-    let fulltext;
+export async function modifyPage(mod: ModifyPageRequest): Promise<boolean> {
+    let fulltext: string;
     try {
         fulltext = await retrieveFullText();
-    } catch (e) {
-        console.error(e);
+    } catch (error) {
+        console.error(error);
         mw.notify(state.convByVar({
             hant: "[Reaction] 失敗！無法獲取頁面內容。", hans: "[Reaction] 失败！无法获取页面内容。",
         }), { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
         return false;
     }
 
-    let newFulltext;
+    let newFulltext = fulltext;
     let summary = "";
     try {
         let timestampRegex = new RegExp(`${escapeRegex(mod.timestamp)}`, "g");
@@ -88,7 +125,7 @@ export async function modifyPage(mod) {
 
         // Check if more than one match is found.
         if (timestampMatch.length > 1) {
-            console.log("[Reaction] More than one timestamp found: " + timestampMatch);
+            console.log("[Reaction] More than one timestamp found: " + timestampMatch.join(", "));
             throw new Error("[Reaction] " + state.convByVar({
                 hant: "原文中找到多個相同的時間戳，小工具無法處理：", hans: "原文中找到多个相同的时间戳，小工具无法处理：",
             }) + mod.timestamp + state.convByVar({
@@ -160,9 +197,10 @@ export async function modifyPage(mod) {
         // 儲存全文。錯誤資訊已在函式內處理。
         return await saveFullText(newFulltext, summary);
 
-    } catch (e) {
-        console.error(e);
-        mw.notify(e.message, { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
+    } catch (error: unknown) {
+        console.error(error);
+        const message = error instanceof Error ? error.message : String(error);
+        mw.notify(message, { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
         return false;
     }
 }

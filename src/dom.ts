@@ -1,39 +1,69 @@
 import state from "./state";
-import {atChineseUtcRegex, getCurrentChineseUtc, parseTimestamp, userNameAtChineseUtcRegex} from "./utils";
-import {modifyPage} from "./api";
+import { atChineseUtcRegex, getCurrentChineseUtc, parseTimestamp, userNameAtChineseUtcRegex } from "./utils";
+import { modifyPage, type ModifyPageRequest } from "./api";
 
 /**
  * 事件處理函式註冊表。WeakMap用於儲存事件處理函式的引用，以便在需要時可以移除它們。
  * @type {WeakMap<HTMLElement, Function>}
  * @private
  */
-const _handlerRegistry = new WeakMap();
+const _handlerRegistry = new WeakMap<HTMLElement, EventListener>();
 
 /**
  * 按鈕對應的時間戳。WeakMap用於儲存按鈕與時間戳之間的關聯。
  * @type {WeakMap<HTMLElement, HTMLElement>}
  * @private
  */
-const _buttonTimestamps = new WeakMap();
+const _buttonTimestamps = new WeakMap<HTMLElement, HTMLElement>();
 
-/**
- * 時間戳列表，包含所有的時間戳元素。
- * @type {HTMLElement[]}
- */
-let timestamps: NodeListOf<HTMLElement> = null;
+function removeRegisteredHandler(element: HTMLElement | null): void {
+    if (!element) {
+        return;
+    }
+    const handler = _handlerRegistry.get(element);
+    if (handler) {
+        element.removeEventListener("click", handler);
+        _handlerRegistry.delete(element);
+    }
+}
 
-/**
- * 回覆按鈕列表，包含所有的回覆按鈕元素（與時間戳一一對應）。
- * @type {HTMLElement[]}
- */
-let replyButtons: NodeListOf<HTMLElement> = null;
+function getButtonParts(button: HTMLElement): { icon: HTMLElement; counter: HTMLElement } | null {
+    const icon = button.querySelector<HTMLElement>(".reaction-icon");
+    const counter = button.querySelector<HTMLElement>(".reaction-counter");
+    if (!icon || !counter) {
+        console.error("[Reaction] Missing icon or counter on reaction button.", button);
+        return null;
+    }
+    return { icon, counter };
+}
+
+function getReactionLabel(button: HTMLElement, icon: HTMLElement): string {
+    const configuredIcon = button.getAttribute("data-reaction-icon")?.trim();
+    if (configuredIcon) {
+        return configuredIcon;
+    }
+    return icon.textContent?.trim() ?? "";
+}
+
+function getTimestampString(button: HTMLElement): string | null {
+    const timestampElement = _buttonTimestamps.get(button);
+    if (!timestampElement) {
+        console.error("[Reaction] Missing timestamp mapping for button.", button);
+        return null;
+    }
+    const parsedTimestamp = parseTimestamp(timestampElement);
+    if (!parsedTimestamp) {
+        console.error("[Reaction] Unable to parse timestamp from timestamp element.", timestampElement);
+    }
+    return parsedTimestamp;
+}
 
 
 /**
  * 處理反應按鈕的點擊事件，轉發到相應的處理函式。
  * @param button {HTMLElement} - 反應按鈕元素。
  */
-function handleReactionClick(button) {
+function handleReactionClick(button: HTMLElement) {
     if (button.classList.contains("reaction-new")) {
         // 對於「新反應」按鈕，轉換為可編輯狀態。
         addNewReaction(button);
@@ -42,12 +72,12 @@ function handleReactionClick(button) {
             // 如果反應圖示無效，不處理。
             mw.notify(state.convByVar({
                 hant: "[Reaction] 反應圖示無效，小工具無法處理。", hans: "[Reaction] 反应图示无效，小工具无法处理。",
-            }), {title: state.convByVar({hant: "錯誤", hans: "错误"}), type: "error"});
+            }), { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
             console.error("[Reaction] Invalid reaction icon.");
             return;
         }
 
-        if (typeof window.ujsReactionConfirmedRequired !== "undefined" && window.ujsReactionConfirmedRequired) {
+        if (window?.ujsReactionConfirmedRequired) {
             // （手賤者專用）點擊普通反應按鈕時，確認是否要追加或取消反應。
             let confirmMessage;
             if (button.classList.contains("reaction-reacted")) {
@@ -60,8 +90,8 @@ function handleReactionClick(button) {
                 });
             }
             OO.ui.confirm(confirmMessage, {
-                title: state.convByVar({hant: "確認", hans: "确认"}), size: "small",
-            }).then((confirmed) => {
+                title: state.convByVar({ hant: "確認", hans: "确认" }), size: "small",
+            }).then((confirmed: boolean) => {
                 if (confirmed) {
                     toggleReaction(button);
                 }
@@ -77,104 +107,109 @@ function handleReactionClick(button) {
  * 切換普通反應按鈕（非「新反應」）的反應狀態。
  * @param button {HTMLElement} - 反應按鈕元素。
  */
-function toggleReaction(button) {
+function toggleReaction(button: HTMLElement) {
+    const parts = getButtonParts(button);
+    if (!parts) {
+        return;
+    }
+    const { icon, counter } = parts;
+    const timestamp = getTimestampString(button);
+    if (!timestamp) {
+        mw.notify(state.convByVar({
+            hant: "[Reaction] 失敗！無法獲取時間戳。", hans: "[Reaction] 失败！无法获取时间戳。",
+        }), { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
+        return;
+    }
+    const counterValue = button.getAttribute("data-reaction-count") ?? counter.innerText;
+    const count = Number.parseInt(counterValue, 10) || 0;
+    const reactionLabel = getReactionLabel(button, icon);
+
     if (button.classList.contains("reaction-reacted")) {
-        if (!button.getAttribute("data-reaction-commentors").includes(state.userName)) {
+        if (!button.getAttribute("data-reaction-commentors")?.includes(state.userName || "")) {
             mw.notify(state.convByVar({
                 hant: "[Reaction] 失敗！不能取消並未做出的反應。", hans: "[Reaction] 失败！不能取消并未做出的反应。",
-            }), {title: state.convByVar({hant: "錯誤", hans: "错误"}), type: "error"});
+            }), { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
             console.log("[Reaction] Should not happen! " + state.userName + " should be in " + button.getAttribute("data-reaction-commentors"));
             return;
         }
-        let buttonIcon = button.querySelector(".reaction-icon");
-        let buttonCounter = button.querySelector(".reaction-counter");
-        let count = parseInt(button.getAttribute("data-reaction-count") || buttonCounter.innerText);
-        let mod;
+
+        const mod: ModifyPageRequest = { timestamp };
         if (count > 1) {
-            mod = {
-                timestamp: parseTimestamp(_buttonTimestamps.get(button)),
-                downvote: button.getAttribute("data-reaction-icon").trim() || buttonIcon.innerText.trim(),
-            };
+            mod.downvote = reactionLabel;
         } else {
-            mod = {
-                timestamp: parseTimestamp(_buttonTimestamps.get(button)),
-                remove: button.getAttribute("data-reaction-icon").trim() || buttonIcon.innerText.trim(),
-            };
+            mod.remove = reactionLabel;
         }
 
-        modifyPage(mod).then((response) => {
-            if (response) {
-                // 外觀上取消反應
-                button.classList.remove("reaction-reacted");
-                if (count > 1) {
-                    buttonCounter.innerText = (count - 1).toString();
+        void modifyPage(mod).then((response) => {
+            if (!response) {
+                return;
+            }
+            button.classList.remove("reaction-reacted");
+            if (count > 1) {
+                counter.innerText = (count - 1).toString();
 
-                    // Update the data-reaction-commentors attribute
-                    let dataCommentors = button.getAttribute("data-reaction-commentors") + "/";  // Add a trailing slash to make it easier to replace
-                    dataCommentors = dataCommentors.replace(new RegExp(userNameAtChineseUtcRegex() + "/", "g"), "");
-                    dataCommentors = dataCommentors.slice(0, -1);  // Remove the trailing slash
-                    button.setAttribute("data-reaction-commentors", dataCommentors);
+                let dataCommentors = `${button.getAttribute("data-reaction-commentors") ?? ""}/`;
+                dataCommentors = dataCommentors.replace(new RegExp(userNameAtChineseUtcRegex() + "/", "g"), "");
+                dataCommentors = dataCommentors.slice(0, -1);
+                button.setAttribute("data-reaction-commentors", dataCommentors);
 
-                    let buttonTitle = button.getAttribute("title");
-                    if (buttonTitle) {
-                        buttonTitle = buttonTitle.replace(new RegExp(userNameAtChineseUtcRegex(), "g"), "");
-                        let trailingSemicolonRegex = new RegExp("；" + atChineseUtcRegex() + "回[應应]了[這这][條条]留言$", "g");
-                        // console.log(trailingSemicolonRegex);
-                        buttonTitle = buttonTitle.replace(trailingSemicolonRegex, "");
-                        let trailingCommaRegex = new RegExp("、​" + atChineseUtcRegex() + "(|、​.+?)(回[應应]了[這这][條条]留言)$", "g");
-                        // console.log(trailingCommaRegex);
-                        buttonTitle = buttonTitle.replace(trailingCommaRegex, "$1$2");
-                        buttonTitle = buttonTitle.replace(new RegExp("^" + atChineseUtcRegex() + "、​"), "");  // Remove leading comma
-                        button.setAttribute("title", buttonTitle);
-                    }
-                } else {
-                    button.parentNode.removeChild(button);
+                let buttonTitle = button.getAttribute("title");
+                if (buttonTitle) {
+                    buttonTitle = buttonTitle.replace(new RegExp(userNameAtChineseUtcRegex(), "g"), "");
+                    let trailingSemicolonRegex = new RegExp("；" + atChineseUtcRegex() + "回[應应]了[這这][條条]留言$", "g");
+                    buttonTitle = buttonTitle.replace(trailingSemicolonRegex, "");
+                    let trailingCommaRegex = new RegExp("、​" + atChineseUtcRegex() + "(|、​.+?)(回[應应]了[這这][條条]留言)$", "g");
+                    buttonTitle = buttonTitle.replace(trailingCommaRegex, "$1$2");
+                    buttonTitle = buttonTitle.replace(new RegExp("^" + atChineseUtcRegex() + "、​"), "");
+                    button.setAttribute("title", buttonTitle);
                 }
+            } else {
+                button.parentNode?.removeChild(button);
             }
         });
     } else {
-        if (button.getAttribute("data-reaction-commentors").includes(state.userName)) {
+        if (state.userName && button.getAttribute("data-reaction-commentors")?.includes(state.userName)) {
             mw.notify(state.convByVar({
                 hant: "[Reaction] 失敗！不能重複做出反應。", hans: "[Reaction] 失败！不能重复做出反应。",
-            }), {title: state.convByVar({hant: "錯誤", hans: "错误"}), type: "error"});
+            }), { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
             console.log("[Reaction] Should not happen! " + state.userName + " should not be in " + button.getAttribute("data-reaction-commentors"));
             return;
         }
-        let buttonIcon = button.querySelector(".reaction-icon");
-        let mod = {
-            timestamp: parseTimestamp(_buttonTimestamps.get(button)),
-            upvote: button.getAttribute("data-reaction-icon").trim() || buttonIcon.innerText.trim(),
+        const mod: ModifyPageRequest = {
+            timestamp,
+            upvote: reactionLabel,
         };
 
-        modifyPage(mod).then((response) => {
-            if (response) {
-                // 外觀上添加反應
-                button.classList.add("reaction-reacted");
-                let buttonCounter = button.querySelector(".reaction-counter");
-                let count = parseInt(buttonCounter.innerText);
-                buttonCounter.innerText = (count + 1).toString();
-
-                // Update the data-reaction-commentors attribute
-                let dataCommentors = button.getAttribute("data-reaction-commentors");
-                if (dataCommentors) {
-                    dataCommentors += "/" + state.userName + "於" + getCurrentChineseUtc();
-                } else {
-                    dataCommentors = state.userName + "於" + getCurrentChineseUtc();
-                }
-                button.setAttribute("data-reaction-commentors", dataCommentors);
-                let buttonTitle = button.getAttribute("title");
-                if (buttonTitle) {
-                    buttonTitle += "；";
-                } else {
-                    buttonTitle = "";
-                }
-                buttonTitle += state.userName + state.convByVar({
-                    hant: "於", hans: "于",
-                }) + getCurrentChineseUtc() + state.convByVar({
-                    hant: "回應了這條留言", hans: "回应了这条留言",
-                });
-                button.setAttribute("title", buttonTitle);
+        void modifyPage(mod).then((response) => {
+            if (!response) {
+                return;
             }
+            button.classList.add("reaction-reacted");
+            const newCount = Number.parseInt(counter.innerText, 10) + 1;
+            counter.innerText = newCount.toString();
+
+            let dataCommentors = button.getAttribute("data-reaction-commentors");
+            const userName = state.userName ?? "";
+            const comment = `${userName}於${getCurrentChineseUtc()}`;
+            if (dataCommentors) {
+                dataCommentors += `/${comment}`;
+            } else {
+                dataCommentors = comment;
+            }
+            button.setAttribute("data-reaction-commentors", dataCommentors);
+
+            let buttonTitle = button.getAttribute("title");
+            if (buttonTitle) {
+                buttonTitle += "；";
+            } else {
+                buttonTitle = "";
+            }
+            buttonTitle += userName + state.convByVar({
+                hant: "於", hans: "于",
+            }) + getCurrentChineseUtc() + state.convByVar({
+                hant: "回應了這條留言", hans: "回应了这条留言",
+            });
+            button.setAttribute("title", buttonTitle);
         });
     }
 }
@@ -184,32 +219,23 @@ function toggleReaction(button) {
  * @param button {HTMLElement} - 「新反應」按鈕元素。
  * @param event {MouseEvent|false} - 滑鼠點擊事件，false 表示不是瀏覽器觸發所以無需取消
  */
-function cancelNewReaction(button, event) {
+function cancelNewReaction(button: HTMLElement, event: MouseEvent | false) {
     if (event) {
         event.stopPropagation();
     }
 
-    // Remove event handlers using the stored bound function reference.
-    let saveButton = button.querySelector(".reaction-save");
-    const saveButtonClickHandler = _handlerRegistry.get(saveButton);
-    if (saveButtonClickHandler) {
-        saveButton.removeEventListener("click", saveButtonClickHandler);
-        // Remove the reference from the registry.
-        _handlerRegistry.delete(saveButton);
-    }
-    let cancelButton = button.querySelector(".reaction-cancel");
-    const cancelButtonClickHandler = _handlerRegistry.get(cancelButton);
-    if (cancelButtonClickHandler) {
-        cancelButton.removeEventListener("click", cancelButtonClickHandler);
-        // Remove the reference from the registry.
-        _handlerRegistry.delete(cancelButton);
-    }
+    removeRegisteredHandler(button.querySelector<HTMLElement>(".reaction-save"));
+    removeRegisteredHandler(button.querySelector<HTMLElement>(".reaction-cancel"));
 
     // Restore the add new reaction button to the original state
-    let buttonIcon = button.querySelector(".reaction-icon");
-    buttonIcon.textContent = "+";
-    let buttonCounter = button.querySelector(".reaction-counter");
-    buttonCounter.innerText = state.convByVar({hant: "反應", hans: "反应"});
+    let buttonIcon = button.querySelector<HTMLElement>(".reaction-icon");
+    if (buttonIcon) {
+        buttonIcon.textContent = "+";
+    }
+    let buttonCounter = button.querySelector<HTMLElement>(".reaction-counter");
+    if (buttonCounter) {
+        buttonCounter.innerText = state.convByVar({ hant: "反應", hans: "反应" });
+    }
 
     // Restore the original event handler
     // Create the bound function and store it in the WeakMap.
@@ -217,7 +243,7 @@ function cancelNewReaction(button, event) {
         console.error("[Reaction] Not possible! The event handler should not be registered yet.");
         return;
     }
-    const buttonClickHandler = handleReactionClick.bind(this, button);
+    const buttonClickHandler: EventListener = () => handleReactionClick(button);
     _handlerRegistry.set(button, buttonClickHandler);
     button.addEventListener("click", buttonClickHandler);
 }
@@ -227,66 +253,64 @@ function cancelNewReaction(button, event) {
  * @param button {HTMLElement} - 「新反應」按鈕元素。
  * @param event {MouseEvent|false} - 滑鼠點擊事件，false 表示不是瀏覽器觸發所以無需取消
  */
-function saveNewReaction(button, event) {
+function saveNewReaction(button: HTMLElement, event: MouseEvent | false) {
     if (event) {
         event.stopPropagation();
     }
 
-    let input = button.querySelector(".reaction-icon input");
+    let input = button.querySelector<HTMLInputElement>(".reaction-icon input");
+    if (!input) {
+        console.error("[Reaction] Missing input element inside reaction icon.");
+        return;
+    }
     if (!input.value.trim()) {
         mw.notify(state.convByVar({
             hant: "[Reaction] 反應內容不能為空！", hans: "[Reaction] 反应内容不能为空！",
-        }), {title: state.convByVar({hant: "錯誤", hans: "错误"}), type: "error"});
+        }), { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
         return;
     }
 
     // Save the new reaction
-    let timestamp = parseTimestamp(_buttonTimestamps.get(button));
+    let timestampElement = _buttonTimestamps.get(button);
+    let timestamp = timestampElement ? parseTimestamp(timestampElement) : null;
     if (!timestamp) {
         mw.notify(state.convByVar({
             hant: "[Reaction] 失敗！無法獲取時間戳。", hans: "[Reaction] 失败！无法获取时间戳。",
-        }), {title: state.convByVar({hant: "錯誤", hans: "错误"}), type: "error"});
+        }), { title: state.convByVar({ hant: "錯誤", hans: "错误" }), type: "error" });
         return;
     }
-    let mod = {
+    let mod: ModifyPageRequest = {
         timestamp: timestamp, append: input.value.trim(),
     };
-    modifyPage(mod).then((response) => {
+    void modifyPage(mod).then((response) => {
         if (response) {
             // Change the icon to the new reaction
             button.classList.remove("reaction-new");
             button.classList.add("reaction-reacted");
-            let buttonIcon = button.querySelector(".reaction-icon");
-            buttonIcon.textContent = input.value;
-            let buttonCounter = button.querySelector(".reaction-counter");
-            buttonCounter.textContent = "1";
+            const parts = getButtonParts(button);
+            if (!parts) {
+                return;
+            }
+            const { icon, counter } = parts;
+            icon.textContent = input.value;
+            counter.textContent = "1";
             button.setAttribute("title", state.userName + state.convByVar({
                 hant: "於", hans: "于",
             }) + getCurrentChineseUtc() + state.convByVar({
                 hant: "回應了這條留言", hans: "回应了这条留言",
             }));
-            button.setAttribute("data-reaction-commentors", state.userName);
+            button.setAttribute("data-reaction-commentors", state.userName ?? "");
 
             // Remove event handlers using the stored bound function reference.
-            let saveButton = button.querySelector(".reaction-save");
-            const saveButtonClickHandler = _handlerRegistry.get(saveButton);
-            if (saveButtonClickHandler) {
-                saveButton.removeEventListener("click", saveButtonClickHandler);
-                // Remove the reference from the registry.
-                _handlerRegistry.delete(saveButton);
-            }
-            let cancelButton = button.querySelector(".reaction-cancel");
-            const cancelButtonClickHandler = _handlerRegistry.get(cancelButton);
-            if (cancelButtonClickHandler) {
-                cancelButton.removeEventListener("click", cancelButtonClickHandler);
-                // Remove the reference from the registry.
-                _handlerRegistry.delete(cancelButton);
-            }
+            removeRegisteredHandler(button.querySelector<HTMLElement>(".reaction-save"));
+            removeRegisteredHandler(button.querySelector<HTMLElement>(".reaction-cancel"));
 
             // Add new reaction button after the old button
             let newReactionButton = NewReactionButton();
-            button.parentNode.insertBefore(newReactionButton, button.nextSibling);
-            _buttonTimestamps.set(newReactionButton, _buttonTimestamps.get(button));  // Store the timestamp for the new button
+            button.parentNode?.insertBefore(newReactionButton, button.nextSibling);
+            if (timestampElement) {
+                _buttonTimestamps.set(newReactionButton, timestampElement);  // Store the timestamp for the new button
+            }
 
             // Restore the original event handler
             // Create the bound function and store it in the WeakMap.
@@ -294,7 +318,7 @@ function saveNewReaction(button, event) {
                 console.error("Not possible! The event handler should not be registered yet.");
                 return;
             }
-            const buttonClickHandler = handleReactionClick.bind(this, button);
+            const buttonClickHandler: EventListener = () => handleReactionClick(button);
             _handlerRegistry.set(button, buttonClickHandler);
             button.addEventListener("click", buttonClickHandler);
         }
@@ -309,7 +333,7 @@ function saveNewReaction(button, event) {
  * @returns {HTMLInputElement} - 可調整大小的輸入框。
  * @constructor
  */
-function ResizableInput(text = "", parent = document.body) {
+function ResizableInput(text: string = "", parent: HTMLElement = document.body || document.createElement("div")): HTMLInputElement {
     let input = document.createElement("input");
     input.value = text;
     input.style.width = "1em";
@@ -330,10 +354,12 @@ function ResizableInput(text = "", parent = document.body) {
     parent.appendChild(hiddenInput);
 
     const inputStyles = window.getComputedStyle(input);
-    [
-        "fontFamily", "fontSize", "fontWeight", "fontStyle", "letterSpacing", "textTransform",
-    ].forEach(prop => {
-        hiddenInput.style[prop] = inputStyles[prop];
+    const mirroredProperties = [
+        "font-family", "font-size", "font-weight", "font-style", "letter-spacing", "text-transform",
+    ];
+    mirroredProperties.forEach((prop) => {
+        const value = inputStyles.getPropertyValue(prop);
+        hiddenInput.style.setProperty(prop, value || "");
     });
 
     function inputResize() {
@@ -351,55 +377,54 @@ function ResizableInput(text = "", parent = document.body) {
  * 將「新反應」按鈕轉換為可編輯狀態，並加入「儲存」和「取消」選單。
  * @param button {HTMLElement} - 「新反應」按鈕元素。
  */
-function addNewReaction(button) {
+function addNewReaction(button: HTMLElement) {
     // Remove event handlers using the stored bound function reference.
     // Retrieve the handler reference from the WeakMap.
-    const buttonClickHandler = _handlerRegistry.get(button);
-    if (buttonClickHandler) {
-        button.removeEventListener("click", buttonClickHandler);
-        // Remove the reference from the registry.
-        _handlerRegistry.delete(button);
-    }
+    removeRegisteredHandler(button);
 
     // Change the icon to a textbox
-    let buttonIcon = button.querySelector(".reaction-icon");
-    buttonIcon.textContent = "";  // Clear the icon
-    let input = ResizableInput("👍", buttonIcon);
-    input.focus();
-    input.select();
-    input.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") {
-            saveNewReaction(button, false);
-        } else if (event.key === "Escape") {
-            cancelNewReaction(button, false);
+    let buttonIcon = button.querySelector<HTMLElement>(".reaction-icon");
+    if (buttonIcon) {
+        buttonIcon.textContent = "";  // Clear the icon
+        let input = ResizableInput("👍", buttonIcon);
+        input.focus();
+        input.select();
+        input.addEventListener("keydown", (event: KeyboardEvent) => {
+            if (event.key === "Enter") {
+                saveNewReaction(button, false);
+            } else if (event.key === "Escape") {
+                cancelNewReaction(button, false);
+            }
+        });
+    }
+
+    let buttonCounter = button.querySelector<HTMLElement>(".reaction-counter");
+    if (buttonCounter) {
+        let saveButton = document.createElement("span");
+        saveButton.className = "reaction-save";
+        saveButton.innerText = state.convByVar({ hant: "儲存", hans: "保存" });
+        if (_handlerRegistry.has(saveButton)) {
+            return;
         }
-    });
+        const saveButtonClickHandler: EventListener = (evt) => saveNewReaction(button, evt as MouseEvent);
+        _handlerRegistry.set(saveButton, saveButtonClickHandler);
+        saveButton.addEventListener("click", saveButtonClickHandler);
 
-    let buttonCounter = button.querySelector(".reaction-counter");
-    let saveButton = document.createElement("span");
-    saveButton.className = "reaction-save";
-    saveButton.innerText = state.convByVar({hant: "儲存", hans: "保存"});
-    if (_handlerRegistry.has(saveButton)) {
-        return;
+        let cancelButton = document.createElement("span");
+        cancelButton.className = "reaction-cancel";
+        cancelButton.innerText = state.convByVar({ hant: "取消", hans: "取消" });
+        if (_handlerRegistry.has(cancelButton)) {
+            return;
+        }
+        const cancelButtonClickHandler: EventListener = (evt) => cancelNewReaction(button, evt as MouseEvent);
+        _handlerRegistry.set(cancelButton, cancelButtonClickHandler);
+        cancelButton.addEventListener("click", cancelButtonClickHandler);
+
+        buttonCounter.innerText = "";
+        buttonCounter.appendChild(saveButton);
+        buttonCounter.appendChild(document.createTextNode(" | "));
+        buttonCounter.appendChild(cancelButton);
     }
-    const saveButtonClickHandler = saveNewReaction.bind(this, button);  // Create bound functions and store them in the WeakMap.
-    _handlerRegistry.set(saveButton, saveButtonClickHandler);
-    saveButton.addEventListener("click", saveButtonClickHandler);
-
-    let cancelButton = document.createElement("span");
-    cancelButton.className = "reaction-cancel";
-    cancelButton.innerText = state.convByVar({hant: "取消", hans: "取消"});
-    if (_handlerRegistry.has(cancelButton)) {
-        return;
-    }
-    const cancelButtonClickHandler = cancelNewReaction.bind(this, button);  // Create bound functions and store them in the WeakMap.
-    _handlerRegistry.set(cancelButton, cancelButtonClickHandler);
-    cancelButton.addEventListener("click", cancelButtonClickHandler);
-
-    buttonCounter.innerText = "";
-    buttonCounter.appendChild(saveButton);
-    buttonCounter.appendChild(document.createTextNode(" | "));
-    buttonCounter.appendChild(cancelButton);
 }
 
 /**
@@ -422,14 +447,14 @@ function NewReactionButton() {
     buttonCounterContainer.className = "reaction-counter-container";
     let buttonCounter = document.createElement("span");
     buttonCounter.className = "reaction-counter";
-    buttonCounter.innerText = state.convByVar({hant: "反應", hans: "反应"});
+    buttonCounter.innerText = state.convByVar({ hant: "反應", hans: "反应" });
     buttonCounterContainer.appendChild(buttonCounter);
     buttonContent.appendChild(buttonIconContainer);
     buttonContent.appendChild(buttonCounterContainer);
     button.appendChild(buttonContent);
 
     // Create the bound function and store it in the WeakMap.
-    let buttonClickHandler = handleReactionClick.bind(this, button);
+    const buttonClickHandler: EventListener = () => handleReactionClick(button);
     _handlerRegistry.set(button, buttonClickHandler);
     button.addEventListener("click", buttonClickHandler);
     return button;
@@ -439,18 +464,18 @@ function NewReactionButton() {
  * 綁定事件到普通反應按鈕（非「新反應」）。
  * @param button {HTMLElement} - 反應按鈕元素。
  */
-function bindEvent2ReactionButton(button) {
+function bindEvent2ReactionButton(button: HTMLElement) {
     // Create the bound function and store it in the WeakMap.
     if (_handlerRegistry.has(button)) {
         return;
     }
-    let buttonClickHandler = handleReactionClick.bind(this, button);
+    let buttonClickHandler: EventListener = () => handleReactionClick(button);
     _handlerRegistry.set(button, buttonClickHandler);
     button.addEventListener("click", buttonClickHandler);
 
     // Check if the user has reacted to this
     let reacted = false;
-    for (const commentor of button.getAttribute("data-reaction-commentors").split("/")) {
+    for (const commentor of button.getAttribute("data-reaction-commentors")?.split("/") || []) {
         // Either username or username於chineseUtc
         let regex = new RegExp('^' + userNameAtChineseUtcRegex() + '$');
         // console.log(regex);
@@ -472,20 +497,20 @@ export function addReactionButtons() {
         return;
     }
 
-    timestamps = document.querySelectorAll("a.ext-discussiontools-init-timestamplink");
-    replyButtons = document.querySelectorAll("span.ext-discussiontools-init-replylink-buttons");
+    const timestamps = document.querySelectorAll<HTMLAnchorElement>("a.ext-discussiontools-init-timestamplink");
+    const replyButtons = document.querySelectorAll<HTMLSpanElement>("span.ext-discussiontools-init-replylink-buttons");
 
     // 尋找時間戳與回覆按鈕之間的所有反應按鈕
     for (let i = 0; i < timestamps.length; i++) {
         let timestamp = timestamps[i];
         let replyButton = replyButtons[i];
-        let button = timestamp.nextElementSibling;
+        let button = timestamp.nextElementSibling as HTMLElement | null;
         while (button && button !== replyButton) {
-            if (button.classList.contains("template-reaction") && button.attributes["data-reaction-commentors"]) {
+            if (button.classList.contains("template-reaction") && button.hasAttribute("data-reaction-commentors")) {
                 _buttonTimestamps.set(button, timestamp);
                 bindEvent2ReactionButton(button);
             }
-            button = button.nextElementSibling;
+            button = button.nextElementSibling as HTMLElement | null;
         }
     }
 
@@ -497,12 +522,12 @@ export function addReactionButtons() {
 
         // Insert the button before the reply button
         let replyButton = replyButtons[i];
-        replyButton.parentNode.insertBefore(reactionButton, replyButton);
+        replyButton.parentNode?.insertBefore(reactionButton, replyButton);
     }
     console.log(`[Reaction] Added ${replyButtons.length} new reaction buttons.`);
 
     let finishedLoading = document.createElement('div');
     finishedLoading.id = "reaction-finished-loading";
     finishedLoading.style.display = "none";  // Hide the loading indicator
-    document.querySelector('#mw-content-text .mw-parser-output').appendChild(finishedLoading);
+    document.querySelector('#mw-content-text .mw-parser-output')?.appendChild(finishedLoading);
 }
