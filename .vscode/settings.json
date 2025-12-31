@@ -1,0 +1,30 @@
+{
+	"editor.detectIndentation": false,
+	"editor.insertSpaces": false,
+	"editor.tabSize": 4,
+	"editor.formatOnSave": true,
+	"eslint.nodePath": "./node_modules",
+	"eslint.useFlatConfig": true,
+	"eslint.options": {
+		"overrideConfigFile": "./eslint.config.cjs"
+	},
+	"eslint.workingDirectories": [
+		{
+			"directory": ".",
+			"changeProcessCWD": true
+		}
+	],
+	"eslint.validate": [
+		"javascript",
+		"typescript"
+	],
+	"typescript.tsdk": "node_modules/typescript/lib",
+	"[github-actions-workflow]": {
+		"editor.insertSpaces": true,
+		"editor.tabSize": 2,
+	},
+	"[lua]": {
+		"editor.insertSpaces": true,
+		"editor.tabSize": 4
+	}
+}
