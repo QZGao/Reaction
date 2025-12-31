@@ -2,7 +2,7 @@ import state from "../state";
 import { escapeRegex, getCurrentChineseUtc } from "../utils";
 import { t, tReaction } from "../i18n";
 import { retrieveFullText, saveFullText } from "./client";
-import { addReactionToLine, appendReactionTemplate, removeReactionFromLine } from "../wikitext";
+import { addReactionToLine, appendReactionTemplate, removeReactionFromLine } from "../wikitext/reactionTemplates";
 
 export interface ModifyPageRequest {
 	timestamp: string;

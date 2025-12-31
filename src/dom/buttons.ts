@@ -1,6 +1,6 @@
 import state from "../state";
 import { getCurrentChineseUtc, parseTimestamp } from "../utils";
-import { modifyPage, type ModifyPageRequest } from "../api";
+import { modifyPage, type ModifyPageRequest } from "../api/modifyPage";
 import { t, tReaction } from "../i18n";
 import {
 	getReactionCommentors,

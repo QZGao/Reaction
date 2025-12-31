@@ -1,4 +1,4 @@
-import { addReactionButtons } from "./dom";
+import { addReactionButtons } from "./dom/buttons";
 
 /**
  * Initialization entry point: load required modules and bind events.
