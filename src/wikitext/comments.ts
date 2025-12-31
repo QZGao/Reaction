@@ -2,15 +2,30 @@ import { normalizeTitle } from "../utils";
 
 const SIGNATURE_SCAN_LIMIT = 100;
 
+/**
+ * Escape special characters in a string for use in a regular expression.
+ * @param text - Input string.
+ * @returns Escaped string safe for regex usage.
+ */
 function escapeRegexLiteral(text: string): string {
 	return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/**
+ * Normalize a user identifier for consistent matching.
+ * @param value - User identifier.
+ * @returns Normalized user identifier.
+ */
 function normalizeUserValue(value: string): string {
 	const normalized = normalizeTitle(value.replace(/_/g, " "));
 	return normalized.toLowerCase();
 }
 
+/**
+ * Collect normalized usernames linked in a wikitext snippet.
+ * @param snippet - Wikitext snippet.
+ * @returns Array of normalized usernames.
+ */
 function collectLinkedUsers(snippet: string): string[] {
 	const users: string[] = [];
 	const userLinkRegex = /\[\[\s*(User(?:[ _]talk)?):([^[\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]/gi;
