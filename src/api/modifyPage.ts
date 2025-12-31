@@ -96,6 +96,7 @@ export async function modifyPage(mod: ModifyPageRequest): Promise<boolean> {
 	}
 
 	try {
+		console.log("[Reaction] Applying page modification:", mod);
 		const { fulltext: newFulltext, summary } = applyPageModification(fulltext, mod);
 		return await saveFullText(newFulltext, summary);
 	} catch (error: unknown) {

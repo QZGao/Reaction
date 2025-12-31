@@ -11,8 +11,9 @@ async function init() {
 		console.error("[Reaction] Failed to load DiscussionTools module.", error);
 		return;
 	}
-	mw.hook("wikipage.content").add(function () {
-		setTimeout(() => addReactionButtons(), 200);
+	mw.hook("wikipage.content").add(function (container) {
+		const roots = container?.get ? container.get() : undefined;
+		setTimeout(() => addReactionButtons(roots && roots.length > 0 ? roots : undefined), 200);
 	});
 }
 

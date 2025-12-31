@@ -157,7 +157,9 @@ function toggleReaction(button: HTMLElement) {
 			}
 			button.classList.remove("reaction-reacted");
 			if (count > 1) {
-				counter.innerText = (count - 1).toString();
+				const newCount = count - 1;
+				counter.innerText = newCount.toString();
+				button.setAttribute("data-reaction-count", newCount.toString());
 				const existingEntries = getReactionCommentors(button);
 				const updatedEntries = removeUserFromEntries(existingEntries, state.userName);
 				setReactionCommentors(button, updatedEntries);
@@ -183,6 +185,7 @@ function toggleReaction(button: HTMLElement) {
 			button.classList.add("reaction-reacted");
 			const newCount = Number.parseInt(counter.innerText, 10) + 1;
 			counter.innerText = newCount.toString();
+			button.setAttribute("data-reaction-count", newCount.toString());
 
 			const commentEntries = getReactionCommentors(button);
 			commentEntries.push({ user: state.userName ?? "", timestamp: getCurrentSignatureTimestamp() });
@@ -448,21 +451,22 @@ function bindEvent2ReactionButton(button: HTMLElement) {
 	}
 }
 
-/**
- * Entry point that wires reaction buttons into the page.
- */
-export function addReactionButtons() {
-	if (document.querySelector('#reaction-finished-loading')) {
-		return;
-	}
+type ReactionRoot = Document | DocumentFragment | Element;
 
-	const timestamps = document.querySelectorAll<HTMLAnchorElement>("a.ext-discussiontools-init-timestamplink");
-	const replyButtons = document.querySelectorAll<HTMLSpanElement>("span.ext-discussiontools-init-replylink-buttons");
+/**
+ * Process a reaction root element to bind reaction buttons and add "new reaction" controls.
+ * @param root {ReactionRoot} - Root element to process.
+ * @returns {number} - Number of "new reaction" buttons inserted.
+ */
+function processReactionRoot(root: ReactionRoot): number {
+	const timestamps = root.querySelectorAll<HTMLAnchorElement>("a.ext-discussiontools-init-timestamplink");
+	const replyButtons = root.querySelectorAll<HTMLSpanElement>("span.ext-discussiontools-init-replylink-buttons");
+	const pairCount = Math.min(timestamps.length, replyButtons.length);
 
 	// Find all reaction buttons between the timestamp and reply areas.
-	for (let i = 0; i < timestamps.length; i++) {
-		let timestamp = timestamps[i];
-		let replyButton = replyButtons[i];
+	for (let i = 0; i < pairCount; i++) {
+		const timestamp = timestamps[i];
+		const replyButton = replyButtons[i];
 		let button = timestamp.nextElementSibling as HTMLElement | null;
 		while (button && button !== replyButton) {
 			if (button.classList.contains("template-reaction") && button.hasAttribute("data-reaction-commentors")) {
@@ -473,20 +477,146 @@ export function addReactionButtons() {
 		}
 	}
 
-	// Add a "New Reaction" button before each reply button
-	for (let i = 0; i < replyButtons.length; i++) {
-		let reactionButton = NewReactionButton();
-		let timestamp = timestamps[i];
-		_buttonTimestamps.set(reactionButton, timestamp);  // Store the timestamp for the new button
-
-		// Insert the button before the reply button
-		let replyButton = replyButtons[i];
-		replyButton.parentNode?.insertBefore(reactionButton, replyButton);
+	let insertedButtons = 0;
+	for (let i = 0; i < pairCount; i++) {
+		const replyButton = replyButtons[i];
+		const timestamp = timestamps[i] ?? null;
+		if (replyButton instanceof HTMLElement && insertNewReactionBefore(replyButton, timestamp)) {
+			insertedButtons++;
+		}
 	}
-	console.log(`[Reaction] Added ${replyButtons.length} new reaction buttons.`);
 
-	let finishedLoading = document.createElement('div');
-	finishedLoading.id = "reaction-finished-loading";
-	finishedLoading.style.display = "none";  // Hide the loading indicator
-	document.querySelector('#mw-content-text .mw-parser-output')?.appendChild(finishedLoading);
+	insertedButtons += processConvenientDiscussionMenus(root);
+	return insertedButtons;
+}
+
+const TIMESTAMP_SELECTOR = [
+	"a.ext-discussiontools-init-timestamplink",
+	"a.cd-comment-button-label.cd-comment-button",
+	"a[data-mw-comment-timestamp]",
+].join(", ");
+
+/**
+ * Resolve the timestamp element associated with a node.
+ * @param node {HTMLElement} - Node within the comment block.
+ * @returns {HTMLElement | null} - Timestamp element or null if not found.
+ */
+function resolveTimestampForNode(node: HTMLElement): HTMLElement | null {
+	const existing = _buttonTimestamps.get(node);
+	if (existing) {
+		return existing;
+	}
+
+	// Walk backwards through siblings to inherit the mapping.
+	let sibling = node.previousElementSibling as HTMLElement | null;
+	while (sibling) {
+		const siblingTimestamp = _buttonTimestamps.get(sibling);
+		if (siblingTimestamp) {
+			_buttonTimestamps.set(node, siblingTimestamp);
+			return siblingTimestamp;
+		}
+		if (sibling.matches?.(TIMESTAMP_SELECTOR)) {
+			_buttonTimestamps.set(node, sibling);
+			return sibling;
+		}
+		sibling = sibling.previousElementSibling as HTMLElement | null;
+	}
+
+	// Fall back to scanning the Convenient Discussions comment container.
+	const commentContainer = node.closest(".cd-comment-part, li, dd, p");
+	const timestamp = commentContainer?.querySelector<HTMLElement>(TIMESTAMP_SELECTOR);
+	if (timestamp) {
+		_buttonTimestamps.set(node, timestamp);
+		return timestamp;
+	}
+	return null;
+}
+
+/**
+ * Insert a "new reaction" button before a target element.
+ * @param target {HTMLElement} - Target element to insert before.
+ * @param timestamp {HTMLElement | null} - Optional timestamp element to associate.
+ * @returns {boolean} - True if insertion was successful, false otherwise.
+ */
+function insertNewReactionBefore(target: HTMLElement, timestamp?: HTMLElement | null): boolean {
+	if (!target.parentNode) {
+		return false;
+	}
+	const previousSibling = target.previousElementSibling as HTMLElement | null;
+	if (previousSibling?.classList.contains("reaction-new")) {
+		return false;
+	}
+
+	const reactionButton = NewReactionButton();
+	const timestampElement = timestamp ?? resolveTimestampForNode(target);
+	if (!timestampElement) {
+		console.warn("[Reaction] Unable to determine timestamp for new reaction button target.", target);
+		return false;
+	}
+
+	_buttonTimestamps.set(reactionButton, timestampElement);
+	target.parentNode.insertBefore(reactionButton, target);
+	return true;
+}
+
+/**
+ * Process Convenient Discussions comment menus to insert "new reaction" buttons.
+ * @param root {ReactionRoot} - Root element to process.
+ * @returns {number} - Number of buttons inserted.
+ */
+function processConvenientDiscussionMenus(root: ReactionRoot): number {
+	const commentParts = Array.from(root.querySelectorAll(".cd-comment-part")).filter(
+		(node): node is HTMLElement => node instanceof HTMLElement,
+	);
+	let inserted = 0;
+	for (const comment of commentParts) {
+		const menuWrapper = comment.querySelector<HTMLElement>(".cd-comment-menu-wrapper");
+		if (!menuWrapper) {
+			continue;
+		}
+		const timestamp = comment.querySelector<HTMLElement>(TIMESTAMP_SELECTOR);
+		if (insertNewReactionBefore(menuWrapper, timestamp ?? null)) {
+			inserted++;
+		}
+	}
+	return inserted;
+}
+
+/**
+ * Entry point that wires reaction buttons into the page.
+ * @param containers {ReactionRoot | ReactionRoot[] | null | undefined} Optional subset of the DOM to process.
+ */
+export function addReactionButtons(containers?: ReactionRoot | ReactionRoot[] | null) {
+	const roots: ReactionRoot[] = [];
+	if (!containers) {
+		roots.push(document);
+	} else if (Array.isArray(containers)) {
+		for (const root of containers) {
+			if (root) {
+				roots.push(root);
+			}
+		}
+	} else {
+		roots.push(containers);
+	}
+
+	let totalInserted = 0;
+	for (const root of roots) {
+		totalInserted += processReactionRoot(root);
+		const reactionButtons = Array.from(root.querySelectorAll(".template-reaction[data-reaction-commentors]"));
+		for (const element of reactionButtons) {
+			if (!(element instanceof HTMLElement)) {
+				continue;
+			}
+			if (!_buttonTimestamps.has(element)) {
+				const timestampElement = resolveTimestampForNode(element);
+				if (!timestampElement) {
+					console.warn("[Reaction] Unable to find timestamp for reaction button.", element);
+					continue;
+				}
+			}
+			bindEvent2ReactionButton(element);
+		}
+	}
+	console.log(`[Reaction] Added ${totalInserted} new reaction buttons.`);
 }
