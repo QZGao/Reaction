@@ -157,19 +157,17 @@ function assignCommentMetadata(
  * @returns Comment start marker element or null if not found.
  */
 function findCommentStartMarker(node: HTMLElement): HTMLElement | null {
-	let anchor = node.closest<HTMLElement>("[data-mw-comment-start]");
-	if (anchor) {
-		return anchor;
-	}
-	let sibling = node.previousElementSibling as HTMLElement | null;
+	let sibling: Node | null = node.previousSibling;
 	while (sibling) {
-		if (sibling.hasAttribute("data-mw-comment-start")) {
+		if (
+			sibling instanceof HTMLElement &&
+			(sibling.hasAttribute("data-mw-comment-start") || sibling.hasAttribute("data-mw-comment-sig"))
+		) {
 			return sibling;
 		}
-		sibling = sibling.previousElementSibling as HTMLElement | null;
+		sibling = sibling.previousSibling;
 	}
-	const container = node.closest(".cd-comment-part, dd, li, p, dl");
-	return container?.querySelector<HTMLElement>("[data-mw-comment-start]") ?? null;
+	return null;
 }
 
 /**
@@ -186,7 +184,10 @@ function assignCommentMetadataFromDom(
 	if (!marker) {
 		return null;
 	}
-	const commentId = marker.id || marker.getAttribute("id");
+	const commentId =
+		marker.getAttribute("data-mw-comment-sig") ||
+		marker.id ||
+		marker.getAttribute("id");
 	if (commentId) {
 		timestampElement.setAttribute("data-reaction-comment-id", commentId);
 	}
