@@ -16,6 +16,7 @@ import {
 	consumeNextComment,
 	type DiscussionToolsMatchingState,
 	type ThreadCommentMetadata,
+	type DiscussionToolsLookup,
 } from "../api/discussionTools";
 
 /**
@@ -148,6 +149,55 @@ function assignCommentMetadata(
 		return timestampMatch;
 	}
 	return consumeNextComment(state);
+}
+
+/**
+ * Find the comment start marker element associated with a node.
+ * @param node - Node within the comment block.
+ * @returns Comment start marker element or null if not found.
+ */
+function findCommentStartMarker(node: HTMLElement): HTMLElement | null {
+	let anchor = node.closest<HTMLElement>("[data-mw-comment-start]");
+	if (anchor) {
+		return anchor;
+	}
+	let sibling = node.previousElementSibling as HTMLElement | null;
+	while (sibling) {
+		if (sibling.hasAttribute("data-mw-comment-start")) {
+			return sibling;
+		}
+		sibling = sibling.previousElementSibling as HTMLElement | null;
+	}
+	const container = node.closest(".cd-comment-part, dd, li, p, dl");
+	return container?.querySelector<HTMLElement>("[data-mw-comment-start]") ?? null;
+}
+
+/**
+ * Assign comment metadata to a timestamp element based on DOM markers.
+ * @param timestampElement - Timestamp HTML element.
+ * @param lookup - DiscussionTools lookup data.
+ * @returns Matched comment metadata or null.
+ */
+function assignCommentMetadataFromDom(
+	timestampElement: HTMLElement,
+	lookup: DiscussionToolsLookup | null,
+): ThreadCommentMetadata | null {
+	const marker = findCommentStartMarker(timestampElement);
+	if (!marker) {
+		return null;
+	}
+	const commentId = marker.id || marker.getAttribute("id");
+	if (commentId) {
+		timestampElement.setAttribute("data-reaction-comment-id", commentId);
+	}
+	if (!lookup || !commentId) {
+		return null;
+	}
+	const comment = lookup.byId.get(commentId);
+	if (comment) {
+		return comment;
+	}
+	return null;
 }
 
 /**
@@ -674,9 +724,17 @@ type ReactionRoot = Document | DocumentFragment | Element;
 /**
  * Process a reaction root element to bind reaction buttons and add "new reaction" controls.
  * @param root {ReactionRoot} - Root element to process.
+ * @param matchingState {DiscussionToolsMatchingState | null} - Optional matching state from DiscussionTools.
+ * @param lookup {DiscussionToolsLookup | null} - Optional lookup data from DiscussionTools.
+ * @param useDomAnchors {boolean} - Whether to use DOM anchors for comment metadata assignment.
  * @returns {number} - Number of "new reaction" buttons inserted.
  */
-function processReactionRoot(root: ReactionRoot, matchingState: DiscussionToolsMatchingState | null): number {
+function processReactionRoot(
+	root: ReactionRoot,
+	matchingState: DiscussionToolsMatchingState | null,
+	lookup: DiscussionToolsLookup | null,
+	useDomAnchors: boolean,
+): number {
 	const timestamps = root.querySelectorAll<HTMLAnchorElement>("a.ext-discussiontools-init-timestamplink");
 	const replyButtons = root.querySelectorAll<HTMLSpanElement>("span.ext-discussiontools-init-replylink-buttons");
 	const pairCount = Math.min(timestamps.length, replyButtons.length);
@@ -688,7 +746,9 @@ function processReactionRoot(root: ReactionRoot, matchingState: DiscussionToolsM
 		if (isInExcludedArea(timestamp) || isInExcludedArea(replyButton)) {
 			continue;
 		}
-		const matchedComment = assignCommentMetadata(timestamp, matchingState);
+		const matchedComment = useDomAnchors
+			? assignCommentMetadataFromDom(timestamp, lookup)
+			: assignCommentMetadata(timestamp, matchingState);
 		if (matchedComment) {
 			storeCommentMetadata(timestamp, matchedComment);
 		}
@@ -857,14 +917,15 @@ export async function addReactionButtons(containers?: ReactionRoot | ReactionRoo
 	}
 
 	const lookup = await getDiscussionToolsLookup();
-	const matchingState = lookup ? createMatchingState(lookup) : null;
+	const useDomAnchors = Boolean(document.querySelector("[data-mw-comment-start]"));
+	const matchingState = !useDomAnchors && lookup ? createMatchingState(lookup) : null;
 
 	let totalInserted = 0;
 	for (const root of roots) {
 		if (root instanceof Element && isInExcludedArea(root)) {
 			continue;
 		}
-		totalInserted += processReactionRoot(root, matchingState);
+		totalInserted += processReactionRoot(root, matchingState, lookup ?? null, useDomAnchors);
 		const reactionButtons = Array.from(root.querySelectorAll(".template-reaction[data-reaction-commentors]"));
 		for (const element of reactionButtons) {
 			if (!(element instanceof HTMLElement)) {
