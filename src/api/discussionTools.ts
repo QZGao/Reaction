@@ -9,6 +9,7 @@ interface ThreadItemHTML {
 	author?: string;
 	timestamp?: string;
 	replies?: ThreadItemHTML[];
+	html?: string;
 }
 
 interface DiscussionToolsPageInfoResponse {
@@ -66,6 +67,26 @@ export function formatSignatureTimestamp(isoTimestamp?: string): string | null {
 	return formatDateForSignature(date);
 }
 
+const EXCLUDED_HTML_PATTERNS = [
+	/mw-archivedtalk/i,
+	/mw-notalk/i,
+	/<blockquote[\s>]/i,
+	/<cite[\s>]/i,
+	/<q[\s>]/i,
+];
+
+/**
+ * Check if the given HTML contains excluded markup.
+ * @param html - HTML string to check.
+ * @returns True if excluded markup is found, false otherwise.
+ */
+function containsExcludedMarkup(html?: string | null): boolean {
+	if (!html) {
+		return false;
+	}
+	return EXCLUDED_HTML_PATTERNS.some((pattern) => pattern.test(html));
+}
+
 /**
  * Recursively collect comment metadata from thread items.
  * @param items - Thread items array.
@@ -85,6 +106,9 @@ function collectComments(
 	for (const item of items) {
 		const nextParent = item.id ?? parentId;
 		if (item.type === "comment" && item.id) {
+			if (containsExcludedMarkup(item.html)) {
+				continue;
+			}
 			const isoTimestamp = item.timestamp ?? undefined;
 			out.push({
 				id: item.id,
