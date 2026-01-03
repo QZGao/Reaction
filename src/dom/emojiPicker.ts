@@ -154,6 +154,115 @@ function destroyPicker(): void {
 	detachViewportListeners();
 }
 
+type PickerPlacement = "bottom" | "top" | "right" | "left";
+
+/**
+ * Clamp a value between a minimum and maximum.
+ * @param value - Value to clamp.
+ * @param min - Minimum allowed value.
+ * @param max - Maximum allowed value.
+ * @returns Clamped value.
+ */
+function clamp(value: number, min: number, max: number): number {
+	if (value < min) {
+		return min;
+	}
+	if (value > max) {
+		return max;
+	}
+	return value;
+}
+
+/**
+ * Select the best placement for the emoji picker.
+ * @param anchorRect - Bounding rect of the anchor element.
+ * @param pickerRect - Bounding rect of the picker element.
+ * @param viewportWidth - Width of the viewport.
+ * @param viewportHeight - Height of the viewport.
+ * @returns Selected placement.
+ */
+function selectPlacement(
+	anchorRect: DOMRect,
+	pickerRect: DOMRect,
+	viewportWidth: number,
+	viewportHeight: number,
+): PickerPlacement {
+	const placements: PickerPlacement[] = [];
+	if (anchorRect.bottom + PICKER_MARGIN_PX + pickerRect.height <= viewportHeight) {
+		placements.push("bottom");
+	}
+	if (anchorRect.top - PICKER_MARGIN_PX - pickerRect.height >= 0) {
+		placements.push("top");
+	}
+	if (anchorRect.right + PICKER_MARGIN_PX + pickerRect.width <= viewportWidth) {
+		placements.push("right");
+	}
+	if (anchorRect.left - PICKER_MARGIN_PX - pickerRect.width >= 0) {
+		placements.push("left");
+	}
+	if (placements.length === 0) {
+		return "bottom";
+	}
+	return placements[0];
+}
+
+/**
+ * Calculate the position for the emoji picker based on placement.
+ * @param placement - Selected placement.
+ * @param anchorRect - Bounding rect of the anchor element.
+ * @param pickerRect - Bounding rect of the picker element.
+ * @param viewportWidth - Width of the viewport.
+ * @param viewportHeight - Height of the viewport.
+ * @returns Top and left position for the picker.
+ */
+function positionForPlacement(
+	placement: PickerPlacement,
+	anchorRect: DOMRect,
+	pickerRect: DOMRect,
+	viewportWidth: number,
+	viewportHeight: number,
+): { top: number; left: number } {
+	switch (placement) {
+		case "top": {
+			const top = anchorRect.top - pickerRect.height - PICKER_MARGIN_PX;
+			const left = clamp(
+				anchorRect.left,
+				PICKER_MARGIN_PX,
+				viewportWidth - pickerRect.width - PICKER_MARGIN_PX,
+			);
+			return { top, left };
+		}
+		case "right": {
+			const left = anchorRect.right + PICKER_MARGIN_PX;
+			const top = clamp(
+				anchorRect.top,
+				PICKER_MARGIN_PX,
+				viewportHeight - pickerRect.height - PICKER_MARGIN_PX,
+			);
+			return { top, left };
+		}
+		case "left": {
+			const left = anchorRect.left - pickerRect.width - PICKER_MARGIN_PX;
+			const top = clamp(
+				anchorRect.top,
+				PICKER_MARGIN_PX,
+				viewportHeight - pickerRect.height - PICKER_MARGIN_PX,
+			);
+			return { top, left };
+		}
+		case "bottom":
+		default: {
+			const top = anchorRect.bottom + PICKER_MARGIN_PX;
+			const left = clamp(
+				anchorRect.left,
+				PICKER_MARGIN_PX,
+				viewportWidth - pickerRect.width - PICKER_MARGIN_PX,
+			);
+			return { top, left };
+		}
+	}
+}
+
 /**
  * Update the position of the emoji picker relative to the anchor element.
  * @param anchor - Anchor element.
@@ -164,24 +273,8 @@ function updatePickerPosition(anchor: HTMLElement, container: HTMLElement): void
 	const pickerRect = container.getBoundingClientRect();
 	const viewportWidth = document.documentElement?.clientWidth ?? window.innerWidth;
 	const viewportHeight = document.documentElement?.clientHeight ?? window.innerHeight;
-
-	let top = anchorRect.bottom + PICKER_MARGIN_PX;
-	let left = anchorRect.left;
-
-	if (top + pickerRect.height > viewportHeight - PICKER_MARGIN_PX) {
-		top = anchorRect.top - pickerRect.height - PICKER_MARGIN_PX;
-	}
-	if (top < PICKER_MARGIN_PX) {
-		top = PICKER_MARGIN_PX;
-	}
-
-	if (left + pickerRect.width > viewportWidth - PICKER_MARGIN_PX) {
-		left = viewportWidth - pickerRect.width - PICKER_MARGIN_PX;
-	}
-	if (left < PICKER_MARGIN_PX) {
-		left = PICKER_MARGIN_PX;
-	}
-
+	const placement = selectPlacement(anchorRect, pickerRect, viewportWidth, viewportHeight);
+	const { top, left } = positionForPlacement(placement, anchorRect, pickerRect, viewportWidth, viewportHeight);
 	const scrollTop = getScrollTop();
 	const scrollLeft = getScrollLeft();
 	container.style.top = `${top + scrollTop}px`;
