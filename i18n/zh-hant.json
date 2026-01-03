@@ -27,5 +27,19 @@
 	"module.reaction.tooltip_separator": "、",
 	"module.reaction.tooltip_suffix": "回應了這條留言",
 	"module.reaction.tooltip_stamp": "%s於%s",
-	"module.reaction.tooltip_prefix_no_reactions": "沒有人"
+	"module.reaction.tooltip_prefix_no_reactions": "沒有人",
+	"emojiPicker.i18n.search": "搜尋表情",
+	"emojiPicker.i18n.notfound": "找不到相關表情",
+	"emojiPicker.i18n.categories.search": "搜尋結果",
+	"emojiPicker.i18n.categories.recent": "常用",
+	"emojiPicker.i18n.categories.smileys": "笑臉與情感",
+	"emojiPicker.i18n.categories.people": "人物與身體",
+	"emojiPicker.i18n.categories.nature": "動物與自然",
+	"emojiPicker.i18n.categories.foods": "食物與飲品",
+	"emojiPicker.i18n.categories.activity": "活動",
+	"emojiPicker.i18n.categories.places": "旅行與地點",
+	"emojiPicker.i18n.categories.objects": "物品",
+	"emojiPicker.i18n.categories.symbols": "符號",
+	"emojiPicker.i18n.categories.flags": "旗幟",
+	"emojiPicker.i18n.categories.custom": "自訂"
 }

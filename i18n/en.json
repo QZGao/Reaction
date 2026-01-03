@@ -27,5 +27,19 @@
 	"module.reaction.tooltip_separator": ", ",
 	"module.reaction.tooltip_suffix": " responded to this comment.",
 	"module.reaction.tooltip_stamp": "%s at %s",
-	"module.reaction.tooltip_prefix_no_reactions": "No one"
+	"module.reaction.tooltip_prefix_no_reactions": "No one",
+	"emojiPicker.i18n.search": "Search emojis",
+	"emojiPicker.i18n.notfound": "No emoji found",
+	"emojiPicker.i18n.categories.search": "Search results",
+	"emojiPicker.i18n.categories.recent": "Frequently used",
+	"emojiPicker.i18n.categories.smileys": "Smileys & emotion",
+	"emojiPicker.i18n.categories.people": "People & body",
+	"emojiPicker.i18n.categories.nature": "Animals & nature",
+	"emojiPicker.i18n.categories.foods": "Food & drink",
+	"emojiPicker.i18n.categories.activity": "Activity",
+	"emojiPicker.i18n.categories.places": "Travel & places",
+	"emojiPicker.i18n.categories.objects": "Objects",
+	"emojiPicker.i18n.categories.symbols": "Symbols",
+	"emojiPicker.i18n.categories.flags": "Flags",
+	"emojiPicker.i18n.categories.custom": "Custom"
 }

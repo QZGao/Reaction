@@ -10,8 +10,7 @@
 	},
 	"eslint.workingDirectories": [
 		{
-			"directory": ".",
-			"changeProcessCWD": true
+			"mode": "auto"
 		}
 	],
 	"eslint.validate": [
