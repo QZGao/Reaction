@@ -42,12 +42,16 @@ export interface PickerProps {
 	custom?: EmojiSelection[];
 	i18n?: PickerI18nMessages;
 	native?: boolean;
+	autoFocus?: boolean;
 	showPreview?: boolean;
+	showSearch?: boolean;
+	showCategories?: boolean;
 	perLine?: number;
 	emojiSize?: number;
 	emojiTooltip?: boolean;
 	skin?: number | null;
 	onSelect?: (emoji: EmojiSelection) => void;
+	infiniteScroll?: boolean;
 }
 
 export const Picker: DefineComponent<PickerProps>;
@@ -56,4 +60,4 @@ declare module "emoji-mart-vue-fast/src" {
 	export * from "emoji-mart-vue-fast";
 }
 
-export {};
+export { };

@@ -10,6 +10,7 @@ import customEmojis from "../emojis/customEmojis";
 import type { PickerProps, EmojiIndex as EmojiIndexType } from "emoji-mart-vue-fast";
 import emojiData from "emoji-mart-vue-fast/data/all.json";
 import emojiMartStyles from "emoji-mart-vue-fast/css/emoji-mart.css";
+import { ref, type Ref } from "vue";
 
 const PICKER_MARGIN_PX = 8;
 const PICKER_CLASS = "reaction-emoji-picker";
@@ -46,8 +47,25 @@ interface PickerAppHandle {
 }
 
 type EmojiIndexConstructor = new (data: typeof emojiData, options?: {
+	include?: string[];
+	exclude?: string[];
 	custom?: EmojiSelection[];
 }) => EmojiIndexType;
+
+interface PickerSearchSlotProps {
+	data: EmojiIndexType;
+	i18n?: {
+		search?: string;
+	};
+	autoFocus?: boolean;
+	onSearch?: (value: string) => void;
+	onArrowLeft?: (event: KeyboardEvent) => void;
+	onArrowRight?: () => void;
+	onArrowDown?: () => void;
+	onArrowUp?: (event: KeyboardEvent) => void;
+	onEnter?: () => void;
+	onTextSelect?: (event: Event) => void;
+}
 
 let pickerApp: PickerAppHandle | null = null;
 let pickerContainer: HTMLDivElement | null = null;
@@ -107,6 +125,7 @@ function getScrollLeft(): number {
 function ensureEmojiIndex(): EmojiIndexType {
 	if (!emojiIndex) {
 		emojiIndex = new (EmojiIndex as EmojiIndexConstructor)(emojiData, {
+			exclude: ["flags"],
 			custom: customEmojis,
 		});
 	}
@@ -371,16 +390,25 @@ function createPickerApp(): PickerAppHandle {
 		data: dataIndex,
 		custom: customEmojis,
 		native: true,
+		autoFocus: true,
+		showSearch: true,
 		showPreview: false,
+		showCategories: true,
 		i18n: {},
 		perLine: 8,
 		emojiSize: 24,
 		emojiTooltip: true,
 		skin: null,
 		onSelect,
+		infiniteScroll: false,
 	};
 	const hostComponent = defineCompatComponent(() => {
-		return () => compatRender(Picker, pickerProps);
+		const searchValue = ref("");
+		const renderSearchSlot = createSearchSlotRenderer(searchValue);
+		return () =>
+			compatRender(Picker, pickerProps, {
+				searchTemplate: (slotProps: PickerSearchSlotProps) => renderSearchSlot(slotProps),
+			});
 	});
 	const app: CompatApp<Element> = createCompatApp(hostComponent);
 	const handle: PickerAppHandle = {
@@ -392,6 +420,80 @@ function createPickerApp(): PickerAppHandle {
 		},
 	};
 	return handle;
+}
+
+/**
+ * Create a renderer for the picker's search slot.
+ * @param searchValue - Reactive search term reference.
+ * @returns Slot renderer function.
+ */
+function createSearchSlotRenderer(searchValue: Ref<string>) {
+	let hasAutoFocused = false;
+	return (slotProps: PickerSearchSlotProps) => {
+		const placeholder = slotProps.i18n?.search || "Search";
+		const shouldAutoFocus = slotProps.autoFocus ?? false;
+		const setInputRef = (element: Element | null): void => {
+			if (!shouldAutoFocus || !(element instanceof HTMLInputElement)) {
+				return;
+			}
+			if (hasAutoFocused) {
+				return;
+			}
+			hasAutoFocused = true;
+			requestAnimationFrame(() => {
+				element.focus({ preventScroll: true });
+				element.select();
+			});
+		};
+		const handleInput = (event: Event): void => {
+			const target = event.target as HTMLInputElement | null;
+			const value = target?.value ?? "";
+			searchValue.value = value;
+			slotProps.onSearch?.(value);
+		};
+		const handleKeydown = (event: KeyboardEvent): void => {
+			switch (event.key) {
+				case "ArrowLeft":
+					slotProps.onArrowLeft?.(event);
+					break;
+				case "ArrowRight":
+					slotProps.onArrowRight?.();
+					break;
+				case "ArrowDown":
+					slotProps.onArrowDown?.();
+					break;
+				case "ArrowUp":
+					slotProps.onArrowUp?.(event);
+					break;
+				case "Enter":
+					slotProps.onEnter?.();
+					break;
+				default:
+					break;
+			}
+		};
+		const handleSelect = (event: Event): void => {
+			slotProps.onTextSelect?.(event);
+		};
+
+		return compatRender("div", { class: "emoji-mart-search" }, [
+			compatRender("input", {
+				type: "text",
+				placeholder,
+				autofocus: shouldAutoFocus,
+				value: searchValue.value,
+				onInput: handleInput,
+				onKeydown: handleKeydown,
+				onSelect: handleSelect,
+				ref: setInputRef,
+			}),
+			compatRender(
+				"span",
+				{ class: "hidden", id: "emoji-picker-search-description" },
+				"Use the left, right, up and down arrow keys to navigate the emoji search results.",
+			),
+		]);
+	};
 }
 
 /**
