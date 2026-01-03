@@ -6,6 +6,7 @@ import {
 	type CompatApp,
 } from "../vueCompat";
 import { Picker, EmojiIndex } from "emoji-mart-vue-fast";
+import customEmojis from "../emojis/customEmojis";
 import type { PickerProps, EmojiIndex as EmojiIndexType } from "emoji-mart-vue-fast";
 import emojiData from "emoji-mart-vue-fast/data/all.json";
 import emojiMartStyles from "emoji-mart-vue-fast/css/emoji-mart.css";
@@ -13,8 +14,23 @@ import emojiMartStyles from "emoji-mart-vue-fast/css/emoji-mart.css";
 const PICKER_MARGIN_PX = 8;
 const PICKER_CLASS = "reaction-emoji-picker";
 const STYLE_ELEMENT_ID = "reaction-emoji-picker-styles";
+const customEmojiTextMap: Record<string, string> = customEmojis.reduce<Record<string, string>>((acc, emoji) => {
+	const key = emoji.short_names?.[0];
+	if (key && typeof emoji.text === "string" && emoji.text.length > 0) {
+		acc[key] = emoji.text;
+	}
+	return acc;
+}, {});
+
+function getCustomEmojiText(selection: EmojiSelection | null | undefined): string | undefined {
+	if (!selection?.id) {
+		return undefined;
+	}
+	return customEmojiTextMap[selection.id];
+}
 
 interface EmojiSelection {
+	id?: string;
 	native?: string;
 	colons?: string;
 }
@@ -24,7 +40,9 @@ interface PickerAppHandle {
 	unmount: () => void;
 }
 
-type EmojiIndexConstructor = new (data: typeof emojiData) => EmojiIndexType;
+type EmojiIndexConstructor = new (data: typeof emojiData, options?: {
+	custom?: EmojiSelection[];
+}) => EmojiIndexType;
 
 let pickerApp: PickerAppHandle | null = null;
 let pickerContainer: HTMLDivElement | null = null;
@@ -82,7 +100,9 @@ function getScrollLeft(): number {
  */
 function ensureEmojiIndex(): EmojiIndexType {
 	if (!emojiIndex) {
-		emojiIndex = new (EmojiIndex as EmojiIndexConstructor)(emojiData);
+		emojiIndex = new (EmojiIndex as EmojiIndexConstructor)(emojiData, {
+			custom: customEmojis,
+		});
 	}
 	return emojiIndex;
 }
@@ -288,7 +308,7 @@ function updatePickerPosition(anchor: HTMLElement, container: HTMLElement): void
 function createPickerApp(): PickerAppHandle {
 	const dataIndex: EmojiIndexType = ensureEmojiIndex();
 	const onSelect: (emoji: EmojiSelection) => void = (emoji: EmojiSelection) => {
-		const value = emoji?.native ?? emoji?.colons ?? "";
+		const value = getCustomEmojiText(emoji) ?? emoji?.native ?? emoji?.colons ?? "";
 		if (!value || !currentInput) {
 			return;
 		}
@@ -300,6 +320,7 @@ function createPickerApp(): PickerAppHandle {
 
 	const pickerProps: PickerProps = {
 		data: dataIndex,
+		custom: customEmojis,
 		native: true,
 		showPreview: false,
 		i18n: {},

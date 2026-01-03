@@ -11,6 +11,10 @@ export interface EmojiSelection {
 	native?: string;
 	short_names?: string[];
 	skin?: number | null;
+	text?: string;
+	emoticons?: string[];
+	keywords?: string[];
+	imageUrl?: string;
 }
 
 export interface EmojiIndexOptions {
@@ -35,6 +39,7 @@ export interface PickerI18nMessages {
 
 export interface PickerProps {
 	data: EmojiIndex;
+	custom?: EmojiSelection[];
 	i18n?: PickerI18nMessages;
 	native?: boolean;
 	showPreview?: boolean;
