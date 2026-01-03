@@ -10,7 +10,8 @@ import customEmojis from "../emojis/customEmojis";
 import type { PickerProps, EmojiIndex as EmojiIndexType } from "emoji-mart-vue-fast";
 import emojiData from "emoji-mart-vue-fast/data/all.json";
 import emojiMartStyles from "emoji-mart-vue-fast/css/emoji-mart.css";
-import { ref, type Ref } from "vue";
+import { ref, type Ref, type ComponentPublicInstance } from "vue";
+import { t } from "../i18n";
 
 const PICKER_MARGIN_PX = 8;
 const PICKER_CLASS = "reaction-emoji-picker";
@@ -33,6 +34,31 @@ function getCustomEmojiText(selection: EmojiSelection | null | undefined): strin
 		return undefined;
 	}
 	return customEmojiTextMap[selection.id];
+}
+
+/**
+ * Create i18n messages for the emoji picker.
+ * @returns I18n messages object.
+ */
+function createPickerI18nMessages(): PickerProps["i18n"] {
+	return {
+		search: t("emojiPicker.i18n.search"),
+		notfound: t("emojiPicker.i18n.notfound"),
+		categories: {
+			search: t("emojiPicker.i18n.categories.search"),
+			recent: t("emojiPicker.i18n.categories.recent"),
+			smileys: t("emojiPicker.i18n.categories.smileys"),
+			people: t("emojiPicker.i18n.categories.people"),
+			nature: t("emojiPicker.i18n.categories.nature"),
+			foods: t("emojiPicker.i18n.categories.foods"),
+			activity: t("emojiPicker.i18n.categories.activity"),
+			places: t("emojiPicker.i18n.categories.places"),
+			objects: t("emojiPicker.i18n.categories.objects"),
+			symbols: t("emojiPicker.i18n.categories.symbols"),
+			flags: t("emojiPicker.i18n.categories.flags"),
+			custom: t("emojiPicker.i18n.categories.custom"),
+		},
+	};
 }
 
 interface EmojiSelection {
@@ -394,13 +420,13 @@ function createPickerApp(): PickerAppHandle {
 		showSearch: true,
 		showPreview: false,
 		showCategories: true,
-		i18n: {},
-		perLine: 8,
+		i18n: createPickerI18nMessages(),
+		perLine: 10,
 		emojiSize: 24,
 		emojiTooltip: true,
 		skin: null,
 		onSelect,
-		infiniteScroll: false,
+		infiniteScroll: true,
 	};
 	const hostComponent = defineCompatComponent(() => {
 		const searchValue = ref("");
@@ -432,7 +458,7 @@ function createSearchSlotRenderer(searchValue: Ref<string>) {
 	return (slotProps: PickerSearchSlotProps) => {
 		const placeholder = slotProps.i18n?.search || "Search";
 		const shouldAutoFocus = slotProps.autoFocus ?? false;
-		const setInputRef = (element: Element | null): void => {
+		const setInputRef = (element: Element | ComponentPublicInstance | null): void => {
 			if (!shouldAutoFocus || !(element instanceof HTMLInputElement)) {
 				return;
 			}
