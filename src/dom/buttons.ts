@@ -18,6 +18,7 @@ import {
 	type ThreadCommentMetadata,
 	type DiscussionToolsLookup,
 } from "../api/discussionTools";
+import { showEmojiPicker, hideEmojiPicker } from "./emojiPicker";
 
 /**
  * Registry for reaction event handlers. WeakMap stores handler references so they can be removed later.
@@ -466,6 +467,7 @@ function cancelNewReaction(button: HTMLElement, event: MouseEvent | false) {
 	if (event) {
 		event.stopPropagation();
 	}
+	hideEmojiPicker(button);
 
 	removeRegisteredHandler(button.querySelector<HTMLElement>(".reaction-save"));
 	removeRegisteredHandler(button.querySelector<HTMLElement>(".reaction-cancel"));
@@ -528,6 +530,7 @@ function saveNewReaction(button: HTMLElement, event: MouseEvent | false) {
 	};
 	void modifyPage(mod).then((response) => {
 		if (response) {
+			hideEmojiPicker(button);
 			// Change the icon to the new reaction
 			button.classList.remove("reaction-new");
 			button.classList.add("reaction-reacted");
@@ -636,6 +639,9 @@ function addNewReaction(button: HTMLElement) {
 			} else if (event.key === "Escape") {
 				cancelNewReaction(button, false);
 			}
+		});
+		void showEmojiPicker(button, input).catch((error) => {
+			console.error("[Reaction] Failed to load emoji picker.", error);
 		});
 	}
 

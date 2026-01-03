@@ -72,6 +72,11 @@ const createBuildOptions = () => {
 		minify: !debug,
 		sourcemap: debug ? 'inline' : false,
 		plugins: [i18nCatalogPlugin],
+		define: {
+			__VUE_OPTIONS_API__: 'true',
+			__VUE_PROD_DEVTOOLS__: 'false',
+			__VUE_PROD_HYDRATION_MISMATCH_DETAILS__: 'false',
+		},
 		// Tell esbuild to load CSS files as text so they're bundled into the JS
 		loader: {
 			'.css': 'text'
