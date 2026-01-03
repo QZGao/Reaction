@@ -22,6 +22,12 @@ interface RetrieveFullTextResponse {
 	};
 }
 
+interface ParsePropertiesResponse {
+	parse?: {
+		properties?: Record<string, unknown>;
+	};
+}
+
 // MediaWiki API instance cache
 let apiInstance: mw.Api | null = null;
 
@@ -60,6 +66,29 @@ export async function fetchPageWikitext(title?: string): Promise<string | null> 
 	const slot = revision?.slots?.main;
 	const content = slot?.["*"] ?? (slot as { content?: string } | undefined)?.content ?? null;
 	return typeof content === "string" ? content : null;
+}
+
+/**
+ * Fetch page property names (including magic words) from the parse API.
+ * @param title - Optional page title override.
+ * @returns Set of property names or null if unavailable.
+ */
+export async function fetchPageProperties(title?: string): Promise<Set<string> | null> {
+	const response = await getApi().get({
+		action: "parse",
+		page: title ?? state.pageName,
+		prop: "properties",
+		formatversion: 2,
+	}) as ParsePropertiesResponse;
+	const properties = response.parse?.properties;
+	if (!properties || typeof properties !== "object") {
+		return null;
+	}
+	const names = Object.keys(properties);
+	if (names.length === 0) {
+		return new Set();
+	}
+	return new Set(names.map((name) => name.toLowerCase()));
 }
 
 /**

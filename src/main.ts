@@ -1,7 +1,15 @@
 import { addReactionButtons } from "./dom/buttons";
-import { fetchPageWikitext } from "./api/client";
+import { fetchPageProperties } from "./api/client";
 
-const MAGIC_WORD_SKIP = ["__NOTALK__", "__ARCHIVEDTALK__"];
+interface MagicWordDescriptor {
+	property: string;
+	labels: string[];
+}
+
+const MAGIC_WORD_SKIP: MagicWordDescriptor[] = [
+	{ property: "notalk", labels: ["__NOTALK__"] },
+	{ property: "archivedtalk", labels: ["__ARCHIVEDTALK__", "__已存档讨论__"] },
+];
 
 let skipCache: boolean | null = null;
 
@@ -13,14 +21,20 @@ async function shouldSkipPage(): Promise<boolean> {
 	if (skipCache !== null) {
 		return skipCache;
 	}
-	const wikitext = await fetchPageWikitext();
-	if (!wikitext) {
+	let propertyNames: Set<string> | null = null;
+	try {
+		propertyNames = await fetchPageProperties();
+	} catch (error) {
+		console.error("[Reaction] Failed to fetch page info for magic word detection.", error);
+	}
+	if (!propertyNames || propertyNames.size === 0) {
 		skipCache = false;
 		return skipCache;
 	}
-	const matched = MAGIC_WORD_SKIP.find((word) => wikitext.includes(word));
+	const matched = MAGIC_WORD_SKIP.find((word) => propertyNames.has(word.property));
 	if (matched) {
-		console.log(`[Reaction] Skipping initialization because ${matched} is present in wikitext.`);
+		const label = matched.labels[0] ?? matched.property;
+		console.log(`[Reaction] Skipping initialization because ${label} is present in page info.`);
 		skipCache = true;
 		return skipCache;
 	}
