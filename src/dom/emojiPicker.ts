@@ -22,6 +22,11 @@ const customEmojiTextMap: Record<string, string> = customEmojis.reduce<Record<st
 	return acc;
 }, {});
 
+/**
+ * Get the text representation for a custom emoji selection.
+ * @param selection - Selected emoji.
+ * @returns Text representation or undefined.
+ */
 function getCustomEmojiText(selection: EmojiSelection | null | undefined): string | undefined {
 	if (!selection?.id) {
 		return undefined;
@@ -51,6 +56,7 @@ let currentInput: HTMLInputElement | null = null;
 let emojiIndex: EmojiIndexType | null = null;
 let styleElement: HTMLStyleElement | null = null;
 let pendingAnimationFrame = 0;
+let documentClickListener: ((event: MouseEvent) => void) | null = null;
 
 /**
  * Ensure that necessary styles for the emoji picker are injected into the document.
@@ -118,6 +124,48 @@ function cleanupAnimationFrame(): void {
 }
 
 /**
+ * Handle clicks outside the emoji picker to hide it.
+ * @param event - Mouse event.
+ */
+function handleDocumentClick(event: MouseEvent): void {
+	if (!pickerContainer) {
+		return;
+	}
+	const target = event.target as Node | null;
+	if (!target) {
+		return;
+	}
+	const clickedInsidePicker = pickerContainer.contains(target);
+	const clickedAnchor = currentAnchor?.contains(target) ?? false;
+	const clickedInput = currentInput ? currentInput === target || currentInput.contains(target) : false;
+	if (!clickedInsidePicker && !clickedAnchor && !clickedInput) {
+		hideEmojiPicker();
+	}
+}
+
+/**
+ * Attach a document-level listener to detect outside clicks.
+ */
+function attachDocumentClickListener(): void {
+	if (documentClickListener || typeof document === "undefined") {
+		return;
+	}
+	documentClickListener = handleDocumentClick;
+	document.addEventListener("mousedown", documentClickListener, true);
+}
+
+/**
+ * Detach the document-level outside click listener.
+ */
+function detachDocumentClickListener(): void {
+	if (!documentClickListener || typeof document === "undefined") {
+		return;
+	}
+	document.removeEventListener("mousedown", documentClickListener, true);
+	documentClickListener = null;
+}
+
+/**
  * Schedule a position update for the emoji picker.
  */
 function schedulePositionUpdate(): void {
@@ -172,6 +220,7 @@ function destroyPicker(): void {
 	currentAnchor = null;
 	currentInput = null;
 	detachViewportListeners();
+	detachDocumentClickListener();
 }
 
 type PickerPlacement = "bottom" | "top" | "right" | "left";
@@ -367,6 +416,7 @@ async function mountPicker(anchor: HTMLElement, input: HTMLInputElement): Promis
 	await compatNextTick(() => undefined);
 	updatePickerPosition(anchor, pickerContainer);
 	attachViewportListeners();
+	attachDocumentClickListener();
 }
 
 /**

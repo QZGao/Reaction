@@ -631,6 +631,13 @@ function addNewReaction(button: HTMLElement) {
 	if (buttonIcon) {
 		buttonIcon.textContent = "";  // Clear the icon
 		let input = ResizableInput("👍", buttonIcon);
+		const openEmojiPicker = () => {
+			void showEmojiPicker(button, input).catch((error) => {
+				console.error("[Reaction] Failed to load emoji picker.", error);
+			});
+		};
+		input.addEventListener("focus", openEmojiPicker);
+		input.addEventListener("click", openEmojiPicker);
 		input.focus();
 		input.select();
 		input.addEventListener("keydown", (event: KeyboardEvent) => {
@@ -639,9 +646,6 @@ function addNewReaction(button: HTMLElement) {
 			} else if (event.key === "Escape") {
 				cancelNewReaction(button, false);
 			}
-		});
-		void showEmojiPicker(button, input).catch((error) => {
-			console.error("[Reaction] Failed to load emoji picker.", error);
 		});
 	}
 
