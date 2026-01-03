@@ -416,7 +416,7 @@ function createPickerApp(): PickerAppHandle {
 		data: dataIndex,
 		custom: customEmojis,
 		native: true,
-		autoFocus: true,
+		autoFocus: false,
 		showSearch: true,
 		showPreview: false,
 		showCategories: true,
@@ -426,7 +426,7 @@ function createPickerApp(): PickerAppHandle {
 		emojiTooltip: true,
 		skin: null,
 		onSelect,
-		infiniteScroll: true,
+		infiniteScroll: false,
 	};
 	const hostComponent = defineCompatComponent(() => {
 		const searchValue = ref("");
