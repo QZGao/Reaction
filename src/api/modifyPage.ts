@@ -158,16 +158,19 @@ async function resolveCommentContext(mod: ModifyPageRequest): Promise<ResolvedCo
  * @returns Modified text plus edit summary.
  */
 export function applyPageModification(fulltext: string, mod: ModifyPageRequest): PageModificationResult {
-	const locateComment = findCommentPosition as (
-		wikitext: string,
-		timestamp: string,
-		author?: string | null,
-		occurrence?: number | null,
-	) => number | null;
-	const position: number | null = locateComment(fulltext, mod.timestamp, mod.author ?? null, mod.timestampOccurrence ?? null);
+	const locateResult = findCommentPosition(
+		fulltext,
+		mod.timestamp,
+		mod.author ?? null,
+		mod.timestampOccurrence ?? null,
+	);
+	const position = locateResult.position;
 	if (position === null) {
-		console.log(`[Reaction] Unable to locate timestamp ${mod.timestamp}.`);
-		throw new Error(tReaction("api.errors.timestamp_missing", [mod.timestamp]));
+		const reason = locateResult.reason ? ` Reason: ${locateResult.reason}.` : "";
+		console.log(`[Reaction] Unable to locate timestamp ${mod.timestamp}.${reason}`);
+		const baseMessage = tReaction("api.errors.timestamp_missing", [mod.timestamp]);
+		const errorMessage = locateResult.reason ? `${baseMessage} (${locateResult.reason})` : baseMessage;
+		throw new Error(errorMessage);
 	}
 
 	let lineEnd = fulltext.indexOf("\n", position);

@@ -155,17 +155,84 @@ function assignCommentMetadata(
 const COMMENT_MARKER_SELECTOR = "[data-mw-comment-start], [data-mw-comment-sig]";
 
 /**
- * Find the comment start marker element associated with a node.
+ * Determine the nearest comment marker preceding or containing the provided node.
  * @param node - Node within the comment block.
  * @returns Comment start marker element or null if not found.
  */
 function findCommentStartMarker(node: HTMLElement): HTMLElement | null {
-	let sibling: Node | null = node.previousSibling;
-	while (sibling) {
-		if (sibling instanceof HTMLElement && sibling.matches(COMMENT_MARKER_SELECTOR)) {
-			return sibling;
+	const boundary =
+		node.closest<HTMLElement>(".cd-comment-part") ??
+		node.closest<HTMLElement>("li, dd, p") ??
+		node.parentElement;
+
+	let current: HTMLElement | null = node;
+	while (current && (!boundary || boundary.contains(current))) {
+		if (current.matches(COMMENT_MARKER_SELECTOR)) {
+			return current;
 		}
-		sibling = sibling.previousSibling;
+
+		let sibling: Node | null = current.previousSibling;
+		while (sibling) {
+			if (sibling instanceof HTMLElement) {
+				if (sibling.matches(COMMENT_MARKER_SELECTOR)) {
+					return sibling;
+				}
+				const descendantMarker = sibling.querySelector<HTMLElement>(COMMENT_MARKER_SELECTOR);
+				if (descendantMarker) {
+					return descendantMarker;
+				}
+			}
+			sibling = sibling.previousSibling;
+		}
+
+		current = current.parentElement;
+	}
+	return null;
+}
+
+/**
+ * Escape a string for use in a CSS selector.
+ * @param value - String to escape.
+ * @returns Escaped string.
+ */
+function escapeSelectorValue(value: string): string {
+	if (typeof CSS !== "undefined" && CSS.escape) {
+		return CSS.escape(value);
+	}
+	return value.replace(/["\\]/g, "\\$&");
+}
+
+/**
+ * Find the timestamp element within a comment block.
+ * @param comment - Comment HTML element.
+ * @returns Timestamp HTML element or null if not found.
+ */
+function findTimestampWithinComment(comment: HTMLElement | null): HTMLElement | null {
+	if (!comment) {
+		return null;
+	}
+	const direct = comment.querySelector<HTMLElement>(TIMESTAMP_SELECTOR);
+	if (direct) {
+		return direct;
+	}
+	const index = comment.getAttribute("data-cd-comment-index");
+	if (index) {
+		const selector = `.cd-comment-part[data-cd-comment-index="${escapeSelectorValue(index)}"]`;
+		const relatedNodeList = comment.ownerDocument?.querySelectorAll(selector) ?? null;
+		const relatedParts = relatedNodeList
+			? Array.from(relatedNodeList).filter(
+				(part): part is HTMLElement => part instanceof HTMLElement,
+			)
+			: [];
+		for (const part of relatedParts) {
+			if (part === comment) {
+				continue;
+			}
+			const timestamp = part.querySelector<HTMLElement>(TIMESTAMP_SELECTOR);
+			if (timestamp) {
+				return timestamp;
+			}
+		}
 	}
 	return null;
 }
@@ -199,6 +266,34 @@ function assignCommentMetadataFromDom(
 		return comment;
 	}
 	return null;
+}
+
+/**
+ * Ensure that a timestamp element has comment metadata assigned.
+ * @param timestampElement - Timestamp HTML element.
+ * @param matchingState - DiscussionTools matching state.
+ * @param lookup - DiscussionTools lookup data.
+ * @param useDomAnchors - Whether to use DOM anchors for assignment.
+ */
+function ensureTimestampMetadata(
+	timestampElement: HTMLElement | null,
+	matchingState: DiscussionToolsMatchingState | null,
+	lookup: DiscussionToolsLookup | null,
+	useDomAnchors: boolean,
+): void {
+	if (!timestampElement) {
+		return;
+	}
+	const hasExisting = COMMENT_METADATA_ATTRIBUTES.some((attr) => timestampElement.hasAttribute(attr));
+	if (hasExisting) {
+		return;
+	}
+	const matched = useDomAnchors
+		? assignCommentMetadataFromDom(timestampElement, lookup)
+		: assignCommentMetadata(timestampElement, matchingState);
+	if (matched) {
+		storeCommentMetadata(timestampElement, matched);
+	}
 }
 
 /**
@@ -785,7 +880,7 @@ function processReactionRoot(
 		}
 	}
 
-	insertedButtons += processConvenientDiscussionMenus(root);
+	insertedButtons += processConvenientDiscussionMenus(root, matchingState, lookup ?? null, useDomAnchors);
 	return insertedButtons;
 }
 
@@ -843,7 +938,9 @@ function resolveTimestampForNode(node: HTMLElement): HTMLElement | null {
 
 	// Fall back to scanning the Convenient Discussions comment container.
 	const commentContainer = node.closest(".cd-comment-part, li, dd, p");
-	const timestamp = commentContainer?.querySelector<HTMLElement>(TIMESTAMP_SELECTOR);
+	const timestamp =
+		commentContainer?.querySelector<HTMLElement>(TIMESTAMP_SELECTOR) ??
+		findTimestampWithinComment(node.closest(".cd-comment-part"));
 	if (timestamp) {
 		_buttonTimestamps.set(node, timestamp);
 		return timestamp;
@@ -885,9 +982,17 @@ function insertNewReactionBefore(target: HTMLElement, timestamp?: HTMLElement | 
 /**
  * Process Convenient Discussions comment menus to insert "new reaction" buttons.
  * @param root {ReactionRoot} - Root element to process.
+ * @param matchingState {DiscussionToolsMatchingState | null} - Optional matching state from DiscussionTools.
+ * @param lookup {DiscussionToolsLookup | null} - Optional lookup data from DiscussionTools.
+ * @param useDomAnchors {boolean} - Whether to use DOM anchors for comment metadata assignment.
  * @returns {number} - Number of buttons inserted.
  */
-function processConvenientDiscussionMenus(root: ReactionRoot): number {
+function processConvenientDiscussionMenus(
+	root: ReactionRoot,
+	matchingState: DiscussionToolsMatchingState | null,
+	lookup: DiscussionToolsLookup | null,
+	useDomAnchors: boolean,
+): number {
 	const commentParts = Array.from(root.querySelectorAll(".cd-comment-part")).filter(
 		(node): node is HTMLElement => node instanceof HTMLElement,
 	);
@@ -900,7 +1005,11 @@ function processConvenientDiscussionMenus(root: ReactionRoot): number {
 		if (!menuWrapper) {
 			continue;
 		}
-		const timestamp = comment.querySelector<HTMLElement>(TIMESTAMP_SELECTOR);
+		const timestamp =
+			comment.querySelector<HTMLElement>(TIMESTAMP_SELECTOR) ?? findTimestampWithinComment(comment);
+		if (timestamp) {
+			ensureTimestampMetadata(timestamp, matchingState, lookup, useDomAnchors);
+		}
 		if (insertNewReactionBefore(menuWrapper, timestamp ?? null)) {
 			inserted++;
 		}
@@ -954,6 +1063,7 @@ export async function addReactionButtons(containers?: ReactionRoot | ReactionRoo
 				timestampElement = resolvedTimestamp;
 				_buttonTimestamps.set(element, resolvedTimestamp);
 			}
+			ensureTimestampMetadata(timestampElement, matchingState, lookup ?? null, useDomAnchors);
 			copyCommentMetadata(timestampElement, element);
 			bindEvent2ReactionButton(element);
 		}
