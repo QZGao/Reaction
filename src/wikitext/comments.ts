@@ -1,6 +1,6 @@
 import { normalizeTitle } from "../utils";
 
-const SIGNATURE_SCAN_LIMIT = 100;
+const SIGNATURE_SCAN_LIMIT = 255; // matches the on-wiki signature length guideline (255 bytes)
 
 /**
  * Escape special characters in a string for use in a regular expression.

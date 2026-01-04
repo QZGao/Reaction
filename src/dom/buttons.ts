@@ -152,6 +152,8 @@ function assignCommentMetadata(
 	return consumeNextComment(state);
 }
 
+const COMMENT_MARKER_SELECTOR = "[data-mw-comment-start], [data-mw-comment-sig]";
+
 /**
  * Find the comment start marker element associated with a node.
  * @param node - Node within the comment block.
@@ -160,10 +162,7 @@ function assignCommentMetadata(
 function findCommentStartMarker(node: HTMLElement): HTMLElement | null {
 	let sibling: Node | null = node.previousSibling;
 	while (sibling) {
-		if (
-			sibling instanceof HTMLElement &&
-			(sibling.hasAttribute("data-mw-comment-start") || sibling.hasAttribute("data-mw-comment-sig"))
-		) {
+		if (sibling instanceof HTMLElement && sibling.matches(COMMENT_MARKER_SELECTOR)) {
 			return sibling;
 		}
 		sibling = sibling.previousSibling;
@@ -928,7 +927,7 @@ export async function addReactionButtons(containers?: ReactionRoot | ReactionRoo
 	}
 
 	const lookup = await getDiscussionToolsLookup();
-	const useDomAnchors = Boolean(document.querySelector("[data-mw-comment-start]"));
+	const useDomAnchors = Boolean(document.querySelector(COMMENT_MARKER_SELECTOR));
 	const matchingState = !useDomAnchors && lookup ? createMatchingState(lookup) : null;
 
 	let totalInserted = 0;
