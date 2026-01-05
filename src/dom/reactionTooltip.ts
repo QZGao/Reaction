@@ -299,7 +299,7 @@ function renderEntries(entries: ReactionCommentorEntry[], container: HTMLElement
 	if (entries.length === 0) {
 		const empty = document.createElement("div");
 		empty.className = `${TOOLTIP_CLASS}__empty`;
-		empty.innerText = t("dom.tooltips.no_reactions");
+		empty.textContent = t("dom.tooltips.no_reactions");
 		container.appendChild(empty);
 		return;
 	}
@@ -313,14 +313,14 @@ function renderEntries(entries: ReactionCommentorEntry[], container: HTMLElement
 		userLink.rel = "noopener";
 		userLink.target = "_blank";
 		const userBdi = document.createElement("bdi"); // For RTL usernames.
-		userBdi.innerText = entry.user;
+		userBdi.textContent = entry.user;
 		userLink.appendChild(userBdi);
 		entryEl.appendChild(userLink);
 
 		if (entry.timestamp) {
 			const timestampEl = document.createElement("span");
 			timestampEl.className = `${TOOLTIP_CLASS}__timestamp`;
-			timestampEl.innerText = convertTimestampToUserTimezone(entry.timestamp);
+			timestampEl.textContent = convertTimestampToUserTimezone(entry.timestamp);
 			entryEl.appendChild(timestampEl);
 		}
 		container.appendChild(entryEl);
