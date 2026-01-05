@@ -72,13 +72,10 @@ function injectTooltipStyles(): void {
 .${TOOLTIP_CLASS} {
 	position: absolute;
 	z-index: 1001;
-	background-color: #202122;
-	color: #f8f9fa;
-	padding: 10px 14px;
-	border-radius: 10px;
-	box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+	padding: 3px 10px;
+	border-radius: 5px;
 	font-size: 0.85em;
-	line-height: 1.35;
+	line-height: 1.15;
 	max-width: 320px;
 	min-width: 180px;
 	opacity: 0;
@@ -86,6 +83,10 @@ function injectTooltipStyles(): void {
 	transform: translate3d(0, 6px, 0);
 	transition: opacity 120ms ease, transform 120ms ease;
 	pointer-events: none;
+	border: 1px solid var(--border-color-base, #a2a9b1);
+	background-color: var(--background-color-base, #fff);
+	color: var(--color-base, #202122);
+	box-shadow: 0 3px 8px rgba(50, 50, 50, 0.35);
 }
 .${TOOLTIP_CLASS}--visible {
 	opacity: 1;
@@ -104,7 +105,7 @@ function injectTooltipStyles(): void {
 	padding: 6px 0;
 }
 .${TOOLTIP_CLASS}__entry + .${TOOLTIP_CLASS}__entry {
-	border-top: 1px solid rgba(248, 249, 250, 0.12);
+	border-top: 1px solid rgba(0, 0, 0, 0.08);
 }
 .${TOOLTIP_CLASS}__user {
 	font-weight: 600;
@@ -112,11 +113,11 @@ function injectTooltipStyles(): void {
 }
 .${TOOLTIP_CLASS}__timestamp {
 	font-size: 0.78em;
-	color: rgba(248, 249, 250, 0.75);
+	color: var(--color-subtle, #54595d);
 }
 .${TOOLTIP_CLASS}__empty {
 	font-size: 0.78em;
-	color: rgba(248, 249, 250, 0.75);
+	color: var(--color-subtle, #54595d);
 	font-style: italic;
 }
 .${TOOLTIP_CLASS}__arrow {
@@ -124,10 +125,12 @@ function injectTooltipStyles(): void {
 	top: -6px;
 	width: 12px;
 	height: 12px;
-	background-color: #202122;
+	background-color: var(--background-color-base, #fff);
 	transform: rotate(45deg);
 	border-radius: 2px;
-	box-shadow: -2px -2px 4px rgba(0, 0, 0, 0.15);
+	box-shadow: -2px -2px 4px rgba(50, 50, 50, 0.2);
+	border-left: 1px solid var(--border-color-base, #a2a9b1);
+	border-top: 1px solid var(--border-color-base, #a2a9b1);
 	pointer-events: none;
 }
 `);
