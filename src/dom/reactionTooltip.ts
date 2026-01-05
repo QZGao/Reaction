@@ -1,0 +1,304 @@
+import { t } from "../i18n";
+import { convertTimestampToUserTimezone } from "../utils";
+import { getReactionCommentors, type ReactionCommentorEntry } from "./commentors";
+
+const TOOLTIP_CLASS = "reaction-tooltip";
+const isMobileSkin = (mw.config.get("skin") as string | undefined) === "minerva";
+const tooltipButtons = new WeakSet<HTMLElement>();
+
+let tooltipContainer: HTMLDivElement | null = null;
+let tooltipContent: HTMLDivElement | null = null;
+let tooltipArrow: HTMLDivElement | null = null;
+let activeButton: HTMLElement | null = null;
+let hideTimer: number | null = null;
+let stylesInjected = false;
+let globalListenersBound = false;
+
+const HIDE_DELAY_MS = 120;
+
+/**
+ * Attach tooltip interactions to a reaction button.
+ * @param button - Reaction button element.
+ */
+export function attachReactionTooltip(button: HTMLElement): void {
+	if (tooltipButtons.has(button)) {
+		return;
+	}
+	if (!button.hasAttribute("data-reaction-commentors")) {
+		return;
+	}
+	ensureTooltipElements();
+	if (isMobileSkin) {
+		button.addEventListener("click", handleMobileClick, true);
+	} else {
+		button.addEventListener("mouseenter", handleButtonEnter);
+		button.addEventListener("mouseleave", handleButtonLeave);
+		button.addEventListener("focus", handleButtonEnter);
+		button.addEventListener("blur", () => hideTooltip(true));
+	}
+	tooltipButtons.add(button);
+}
+
+function ensureTooltipElements(): void {
+	if (tooltipContainer) {
+		return;
+	}
+	injectTooltipStyles();
+	tooltipContainer = document.createElement("div");
+	tooltipContainer.className = TOOLTIP_CLASS;
+	tooltipContainer.setAttribute("role", "tooltip");
+	tooltipContainer.setAttribute("aria-hidden", "true");
+
+	tooltipArrow = document.createElement("div");
+	tooltipArrow.className = `${TOOLTIP_CLASS}__arrow`;
+	tooltipContent = document.createElement("div");
+	tooltipContent.className = `${TOOLTIP_CLASS}__content`;
+
+	tooltipContainer.appendChild(tooltipArrow);
+	tooltipContainer.appendChild(tooltipContent);
+	tooltipContainer.addEventListener("mouseenter", cancelHide);
+	tooltipContainer.addEventListener("mouseleave", handleTooltipLeave);
+
+	document.body.appendChild(tooltipContainer);
+	bindGlobalListeners();
+}
+
+function injectTooltipStyles(): void {
+	if (stylesInjected) {
+		return;
+	}
+	stylesInjected = true;
+	mw.util.addCSS(`
+.${TOOLTIP_CLASS} {
+	position: absolute;
+	z-index: 1001;
+	background-color: #202122;
+	color: #f8f9fa;
+	padding: 10px 14px;
+	border-radius: 10px;
+	box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+	font-size: 0.85em;
+	line-height: 1.35;
+	max-width: 320px;
+	min-width: 180px;
+	opacity: 0;
+	visibility: hidden;
+	transform: translate3d(0, 6px, 0);
+	transition: opacity 120ms ease, transform 120ms ease;
+	pointer-events: none;
+}
+.${TOOLTIP_CLASS}--visible {
+	opacity: 1;
+	visibility: visible;
+	transform: translate3d(0, 0, 0);
+	pointer-events: auto;
+}
+.${TOOLTIP_CLASS}__content {
+	max-height: 260px;
+	overflow-y: auto;
+}
+.${TOOLTIP_CLASS}__entry {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 6px 0;
+}
+.${TOOLTIP_CLASS}__entry + .${TOOLTIP_CLASS}__entry {
+	border-top: 1px solid rgba(248, 249, 250, 0.12);
+}
+.${TOOLTIP_CLASS}__user {
+	font-weight: 600;
+	word-break: break-word;
+}
+.${TOOLTIP_CLASS}__timestamp {
+	font-size: 0.78em;
+	color: rgba(248, 249, 250, 0.75);
+}
+.${TOOLTIP_CLASS}__empty {
+	font-size: 0.78em;
+	color: rgba(248, 249, 250, 0.75);
+	font-style: italic;
+}
+.${TOOLTIP_CLASS}__arrow {
+	position: absolute;
+	top: -6px;
+	width: 12px;
+	height: 12px;
+	background-color: #202122;
+	transform: rotate(45deg);
+	border-radius: 2px;
+	box-shadow: -2px -2px 4px rgba(0, 0, 0, 0.15);
+	pointer-events: none;
+}
+`);
+}
+
+function bindGlobalListeners(): void {
+	if (globalListenersBound) {
+		return;
+	}
+	globalListenersBound = true;
+	document.addEventListener("click", handleDocumentInteraction, true);
+	document.addEventListener("touchstart", handleDocumentInteraction, true);
+	window.addEventListener("scroll", () => hideTooltip(true), true);
+	window.addEventListener("resize", () => hideTooltip(true));
+}
+
+function handleMobileClick(event: Event): void {
+	const target = event.currentTarget;
+	if (!(target instanceof HTMLElement)) {
+		return;
+	}
+	if (isTooltipVisible() && activeButton === target) {
+		hideTooltip(true);
+		return;
+	}
+	if (showTooltip(target)) {
+		event.stopImmediatePropagation();
+		event.preventDefault();
+	}
+}
+
+function handleButtonEnter(event: Event): void {
+	if (!(event.currentTarget instanceof HTMLElement)) {
+		return;
+	}
+	cancelHide();
+	showTooltip(event.currentTarget);
+}
+
+function handleButtonLeave(): void {
+	scheduleHide();
+}
+
+function handleTooltipLeave(): void {
+	if (isMobileSkin) {
+		return;
+	}
+	scheduleHide();
+}
+
+function handleDocumentInteraction(event: Event): void {
+	if (!isTooltipVisible()) {
+		return;
+	}
+	const target = event.target;
+	if (
+		(target instanceof Node && tooltipContainer?.contains(target)) ||
+		(target instanceof Node && activeButton?.contains(target))
+	) {
+		return;
+	}
+	hideTooltip(true);
+}
+
+function scheduleHide(): void {
+	cancelHide();
+	hideTimer = window.setTimeout(() => hideTooltip(), HIDE_DELAY_MS);
+}
+
+function cancelHide(): void {
+	if (hideTimer !== null) {
+		window.clearTimeout(hideTimer);
+		hideTimer = null;
+	}
+}
+
+function hideTooltip(immediate = false): void {
+	cancelHide();
+	const tooltip = tooltipContainer;
+	if (!tooltip) {
+		return;
+	}
+	tooltip.classList.remove(`${TOOLTIP_CLASS}--visible`);
+	tooltip.setAttribute("aria-hidden", "true");
+	if (immediate) {
+		tooltip.style.left = "-9999px";
+		tooltip.style.top = "-9999px";
+	}
+	activeButton?.removeAttribute("data-reaction-tooltip-visible");
+	activeButton = null;
+}
+
+function isTooltipVisible(): boolean {
+	return Boolean(tooltipContainer?.classList.contains(`${TOOLTIP_CLASS}--visible`));
+}
+
+function showTooltip(button: HTMLElement): boolean {
+	const tooltip = tooltipContainer;
+	const content = tooltipContent;
+	if (!tooltip || !content) {
+		return false;
+	}
+	const entries = getReactionCommentors(button);
+	renderEntries(entries, content);
+	positionTooltip(button);
+	activeButton = button;
+	button.setAttribute("data-reaction-tooltip-visible", "true");
+	tooltip.classList.add(`${TOOLTIP_CLASS}--visible`);
+	tooltip.setAttribute("aria-hidden", "false");
+	return true;
+}
+
+function renderEntries(entries: ReactionCommentorEntry[], container: HTMLElement): void {
+	container.textContent = "";
+	if (entries.length === 0) {
+		const empty = document.createElement("div");
+		empty.className = `${TOOLTIP_CLASS}__empty`;
+		empty.innerText = t("dom.tooltips.no_reactions");
+		container.appendChild(empty);
+		return;
+	}
+	for (const entry of entries) {
+		const entryEl = document.createElement("div");
+		entryEl.className = `${TOOLTIP_CLASS}__entry`;
+
+		const userEl = document.createElement("span");
+		userEl.className = `${TOOLTIP_CLASS}__user`;
+		userEl.innerText = entry.user;
+		entryEl.appendChild(userEl);
+
+		if (entry.timestamp) {
+			const timestampEl = document.createElement("span");
+			timestampEl.className = `${TOOLTIP_CLASS}__timestamp`;
+			timestampEl.innerText = convertTimestampToUserTimezone(entry.timestamp);
+			entryEl.appendChild(timestampEl);
+		}
+		container.appendChild(entryEl);
+	}
+}
+
+function positionTooltip(button: HTMLElement): void {
+	const tooltip = tooltipContainer;
+	if (!tooltip || !tooltipContent) {
+		return;
+	}
+	tooltip.style.left = "0px";
+	tooltip.style.top = "0px";
+	const rect = button.getBoundingClientRect();
+	const scrollLeft = window.pageXOffset ?? document.documentElement.scrollLeft ?? 0;
+	const scrollTop = window.pageYOffset ?? document.documentElement.scrollTop ?? 0;
+	const viewportWidth = document.documentElement.clientWidth ?? window.innerWidth;
+
+	// Force layout to measure.
+	tooltip.style.visibility = "hidden";
+	tooltip.classList.add(`${TOOLTIP_CLASS}--visible`);
+	const tooltipWidth = tooltip.offsetWidth;
+	tooltip.classList.remove(`${TOOLTIP_CLASS}--visible`);
+	tooltip.style.visibility = "";
+
+	let left = rect.left + scrollLeft + rect.width / 2 - tooltipWidth / 2;
+	const minLeft = scrollLeft + 8;
+	const maxLeft = scrollLeft + viewportWidth - tooltipWidth - 8;
+	left = Math.min(Math.max(left, minLeft), maxLeft);
+	const top = rect.bottom + scrollTop + 8;
+
+	tooltip.style.left = `${left}px`;
+	tooltip.style.top = `${top}px`;
+
+	if (tooltipArrow) {
+		const relative = rect.left + rect.width / 2 - left;
+		const bounded = Math.max(12, Math.min(tooltipWidth - 12, relative));
+		tooltipArrow.style.left = `${bounded - tooltipArrow.offsetWidth / 2}px`;
+	}
+}
