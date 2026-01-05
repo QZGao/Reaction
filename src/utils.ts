@@ -1,4 +1,5 @@
 import moment from "moment-timezone";
+import type { Moment } from "moment-timezone";
 import type { TimestampParserFn } from "./wikitext/timestamps";
 import { DEFAULT_MESSAGES, getTimestampParser, getTimestampRegexp } from "./wikitext/timestamps";
 
@@ -35,6 +36,16 @@ interface TimestampMatcher {
 let cachedParserData: DiscussionToolsParserData | null = null;
 let timestampMatchers: TimestampMatcher[] | null = null;
 let timestampFormatter: ((date: Date) => string) | null = null;
+let cachedFormatMetadata: TimestampFormatMetadata | null = null;
+let timestampRenderer: ((momentDate: Moment) => string) | null = null;
+
+interface TimestampFormatMetadata {
+	format: string;
+	digits: string[] | null;
+	messages: Record<string, string>;
+	timezone: string;
+	timezoneAbbreviations: Record<string, string>;
+}
 
 /**
  * Escape special characters for use inside a regex character class.
@@ -94,6 +105,27 @@ function getTimestampFormatter(): ((date: Date) => string) | null {
 	if (timestampFormatter) {
 		return timestampFormatter;
 	}
+	const metadata = getTimestampFormatMetadata();
+	const renderer = getTimestampRenderer();
+	if (!metadata || !renderer) {
+		return null;
+	}
+	timestampFormatter = (date: Date): string => {
+		const momentDate = moment(date).tz(metadata.timezone);
+		const timezoneDisplay = getTimezoneDisplay(momentDate.zoneAbbr(), metadata.timezoneAbbreviations);
+		return `${renderer(momentDate)} (${timezoneDisplay})`;
+	};
+	return timestampFormatter;
+}
+
+/**
+ * Retrieve cached timestamp format metadata.
+ * @returns Metadata or null if unavailable.
+ */
+function getTimestampFormatMetadata(): TimestampFormatMetadata | null {
+	if (cachedFormatMetadata) {
+		return cachedFormatMetadata;
+	}
 	const parserData = getParserData();
 	if (!parserData) {
 		return null;
@@ -103,37 +135,50 @@ function getTimestampFormatter(): ((date: Date) => string) | null {
 		return null;
 	}
 	const format = parserData.dateFormat[variant];
-	const digits = parserData.digits[variant];
 	const tzAbbrs = parserData.timezones[variant];
 	if (!format || !tzAbbrs) {
 		return null;
 	}
-	const messages = parserData.contLangMessages[variant];
-	timestampFormatter = createTimestampFormatter(format, {
-		digits,
-		messages,
+	cachedFormatMetadata = {
+		format,
+		digits: parserData.digits[variant] ?? null,
+		messages: parserData.contLangMessages[variant] ?? {},
 		timezone: parserData.localTimezone,
 		timezoneAbbreviations: tzAbbrs,
-	});
-	return timestampFormatter;
-}
-
-interface TimestampFormatterOptions {
-	digits?: string[];
-	messages?: Record<string, string>;
-	timezone: string;
-	timezoneAbbreviations: Record<string, string>;
+	};
+	return cachedFormatMetadata;
 }
 
 /**
- * Create a timestamp formatter based on a MediaWiki date format string.
- * @param format - MediaWiki date format.
- * @param options - Formatting options.
- * @returns Formatter function.
+ * Retrieve cached timestamp renderer.
+ * @returns Renderer function or null if unavailable.
  */
-function createTimestampFormatter(format: string, options: TimestampFormatterOptions): (date: Date) => string {
-	const digits = options.digits && options.digits.length === 10 ? options.digits : null;
-	const messages = options.messages ?? {};
+function getTimestampRenderer(): ((momentDate: Moment) => string) | null {
+	if (timestampRenderer) {
+		return timestampRenderer;
+	}
+	const metadata = getTimestampFormatMetadata();
+	if (!metadata) {
+		return null;
+	}
+	timestampRenderer = createTimestampPatternRenderer(metadata.format, metadata.digits, metadata.messages);
+	return timestampRenderer;
+}
+
+/**
+ * Create a timestamp pattern renderer function.
+ * @param format - Timestamp format string.
+ * @param digitMap - Localized digits or null.
+ * @param messages - Localization messages.
+ * @returns Renderer function.
+ */
+function createTimestampPatternRenderer(
+	format: string,
+	digitMap: string[] | null,
+	messages: Record<string, string>,
+): (momentDate: Moment) => string {
+	const localizedDigits = digitMap && digitMap.length === 10 ? digitMap : null;
+	const messageOverrides = messages ?? {};
 
 	const monthGenKeys = [
 		"january-gen",
@@ -167,17 +212,17 @@ function createTimestampFormatter(format: string, options: TimestampFormatterOpt
 	const dayShortKeys = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 	const dayLongKeys = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
-	const monthGenNames = monthGenKeys.map((key) => messages[key] ?? DEFAULT_MESSAGES[key]);
-	const monthNames = monthFullKeys.map((key) => messages[key] ?? DEFAULT_MESSAGES[key]);
-	const monthShortNames = monthShortKeys.map((key) => messages[key] ?? DEFAULT_MESSAGES[key]);
-	const dayShortNames = dayShortKeys.map((key) => messages[key] ?? DEFAULT_MESSAGES[key]);
-	const dayLongNames = dayLongKeys.map((key) => messages[key] ?? DEFAULT_MESSAGES[key]);
+	const monthGenNames = monthGenKeys.map((key) => messageOverrides[key] ?? DEFAULT_MESSAGES[key]);
+	const monthNames = monthFullKeys.map((key) => messageOverrides[key] ?? DEFAULT_MESSAGES[key]);
+	const monthShortNames = monthShortKeys.map((key) => messageOverrides[key] ?? DEFAULT_MESSAGES[key]);
+	const dayShortNames = dayShortKeys.map((key) => messageOverrides[key] ?? DEFAULT_MESSAGES[key]);
+	const dayLongNames = dayLongKeys.map((key) => messageOverrides[key] ?? DEFAULT_MESSAGES[key]);
 
 	const localizeDigits = (value: string, rawNumbers: boolean): string => {
-		if (rawNumbers || !digits) {
+		if (rawNumbers || !localizedDigits) {
 			return value;
 		}
-		return value.replace(/\d/g, (digit) => digits[Number(digit)] ?? digit);
+		return value.replace(/\d/g, (digit) => localizedDigits[Number(digit)] ?? digit);
 	};
 
 	const formatNumber = (value: number, padLength: number | null, rawNumbers: boolean): string => {
@@ -185,21 +230,7 @@ function createTimestampFormatter(format: string, options: TimestampFormatterOpt
 		return localizeDigits(base, rawNumbers);
 	};
 
-	const getTimezoneDisplay = (abbr: string): string => {
-		for (const [display, normalized] of Object.entries(options.timezoneAbbreviations)) {
-			if (normalized === abbr) {
-				return display;
-			}
-		}
-		const entries = Object.keys(options.timezoneAbbreviations);
-		if (entries.length > 0) {
-			return entries[0];
-		}
-		return abbr || "UTC";
-	};
-
-	return (date: Date): string => {
-		const momentDate = moment(date).tz(options.timezone);
+	return (momentDate: Moment): string => {
 		let rawNumbers = false;
 		let output = "";
 
@@ -306,9 +337,27 @@ function createTimestampFormatter(format: string, options: TimestampFormatterOpt
 			}
 		}
 
-		const timezoneDisplay = getTimezoneDisplay(momentDate.zoneAbbr());
-		return `${output} (${timezoneDisplay})`;
+		return output;
 	};
+}
+
+/**
+ * Get the display form of a timezone abbreviation.
+ * @param abbr - Timezone abbreviation.
+ * @param timezoneAbbreviations - Mapping of display to normalized abbreviations.
+ * @returns Display form of the abbreviation.
+ */
+function getTimezoneDisplay(abbr: string, timezoneAbbreviations: Record<string, string>): string {
+	for (const [display, normalized] of Object.entries(timezoneAbbreviations)) {
+		if (normalized === abbr) {
+			return display;
+		}
+	}
+	const entries = Object.keys(timezoneAbbreviations);
+	if (entries.length > 0) {
+		return entries[0];
+	}
+	return abbr || "UTC";
 }
 
 /**
@@ -410,6 +459,256 @@ function parseUtc14(utc14: string): Date {
 
 	// Create a Date object from UTC values
 	return new Date(Date.UTC(year, month, day, hour, minute, second));
+}
+
+/**
+ * Parse a localized signature timestamp string into a Date.
+ * @param timestampText - Timestamp text content.
+ * @returns Parsed Date or null.
+ */
+export function parseSignatureTimestampText(timestampText: string): Date | null {
+	if (!timestampText) {
+		return null;
+	}
+	const matchers = getTimestampMatchers();
+	if (!matchers) {
+		return null;
+	}
+	for (const matcher of matchers) {
+		const match = timestampText.match(matcher.regex);
+		if (!match) {
+			continue;
+		}
+		const parsed = matcher.parser(match);
+		if (parsed?.date) {
+			return parsed.date;
+		}
+	}
+	return null;
+}
+
+/**
+ * Retrieve the user's timezone offset preference from MediaWiki settings.
+ * @param referenceDate - Date for evaluating DST-aware offsets.
+ * @returns Offset in minutes from UTC or null if unavailable.
+ */
+export function getUserTimezoneOffsetMinutes(referenceDate?: Date): number | null {
+	const correctionRaw: unknown = mw.user.options.get("timecorrection");
+	const correctionString = typeof correctionRaw === "string" ? correctionRaw : null;
+	const correctionOffset = correctionString ? getOffsetFromTimeCorrection(correctionString, referenceDate) : null;
+	const timezonePref = resolveUserTimezoneName();
+	const timezoneOffset = timezonePref ? getOffsetFromTimezoneName(timezonePref, referenceDate) : null;
+	const finalOffset = correctionOffset ?? timezoneOffset ?? 0;
+	return finalOffset;
+}
+
+/**
+ * Parse a timezone offset expression into minutes.
+ * @param expression - Offset expression (e.g. "+5:30", "-120", "3").
+ * @returns Offset in minutes or null if parsing fails.
+ */
+function parseOffsetMinutes(expression: string): number | null {
+	const trimmed = expression.trim();
+	if (!trimmed) {
+		return null;
+	}
+	const match = trimmed.match(/^([+-]?)(\d{1,2})(?::?(\d{2}))?$/);
+	if (match) {
+		const sign = match[1] === "-" ? -1 : 1;
+		const hours = Number(match[2]);
+		const minutes = match[3] ? Number(match[3]) : 0;
+		return sign * (hours * 60 + minutes);
+	}
+	const numeric = Number(trimmed);
+	if (!Number.isNaN(numeric)) {
+		if (Math.abs(numeric) <= 24) {
+			return numeric * 60;
+		}
+		return numeric;
+	}
+	return null;
+}
+
+/**
+ * Format a UTC offset in minutes into a display label.
+ * @param offsetMinutes - Offset in minutes.
+ * @returns Formatted label (e.g. "UTC+5:30").
+ */
+function formatUtcOffsetLabel(offsetMinutes: number): string {
+	const sign = offsetMinutes >= 0 ? "+" : "-";
+	const absolute = Math.abs(offsetMinutes);
+	const hours = Math.floor(absolute / 60);
+	const minutes = absolute % 60;
+	if (minutes === 0) {
+		return `UTC${sign}${hours}`;
+	}
+	return `UTC${sign}${hours}:${minutes.toString().padStart(2, "0")}`;
+}
+
+/**
+ * Format a Date with a specific UTC offset.
+ * @param date - Date to format.
+ * @param offsetMinutes - Offset in minutes from UTC.
+ * @returns Formatted timestamp string or null if formatting fails.
+ */
+function formatDateWithOffset(date: Date, offsetMinutes: number): string | null {
+	const renderer = getTimestampRenderer();
+	if (!renderer) {
+		return null;
+	}
+	const momentDate = moment(date).utcOffset(offsetMinutes);
+	const timezoneDisplay = formatUtcOffsetLabel(offsetMinutes);
+	return `${renderer(momentDate)} (${timezoneDisplay})`;
+}
+
+/**
+ * Convert a signature timestamp to the user's preferred timezone, when available.
+ * @param timestamp - Raw signature timestamp text.
+ * @returns Localized timestamp string.
+ */
+export function convertTimestampToUserTimezone(timestamp: string): string {
+	const parsedDate = parseSignatureTimestampText(timestamp);
+	if (!parsedDate) {
+		return timestamp;
+	}
+	const offsetMinutes = getUserTimezoneOffsetMinutes(parsedDate);
+	if (!offsetMinutes) {
+		return timestamp;
+	}
+	const localized = formatDateWithOffset(parsedDate, offsetMinutes);
+	return localized ?? timestamp;
+}
+
+/**
+ * Get the user's time correction offset from MediaWiki settings.
+ * @param referenceDate - Date for evaluating DST-aware offsets.
+ * @returns Offset in minutes or null if unavailable.
+ */
+function getOffsetFromTimeCorrection(correctionValue: string, referenceDate?: Date): number | null {
+	const correction = correctionValue.trim();
+	if (!correction || correction.toLowerCase() === "default") {
+		return null;
+	}
+	const [modeRaw, ...rest] = correction.split("|");
+	const mode = (modeRaw ?? "").toLowerCase();
+	const values = rest.map((value) => value.trim()).filter((value) => value.length > 0);
+
+	if (mode === "zoneinfo") {
+		const timezoneCandidate = values.find((value) => parseOffsetMinutes(value) === null) ?? null;
+		if (timezoneCandidate) {
+			const normalized = normalizeTimezoneCandidate(timezoneCandidate);
+			for (const candidate of normalized) {
+				const offset = getOffsetFromTimezoneName(candidate, referenceDate);
+				if (offset !== null) {
+					return offset;
+				}
+			}
+		}
+		const fallback = values.find((value) => parseOffsetMinutes(value) !== null);
+		if (fallback) {
+			const parsed = parseOffsetMinutes(fallback);
+			if (parsed !== null) {
+				return parsed;
+			}
+		}
+		return null;
+	}
+
+	if (mode === "offset") {
+		for (const value of values) {
+			const parsed = parseOffsetMinutes(value);
+			if (parsed !== null) {
+				return parsed;
+			}
+		}
+		return null;
+	}
+
+	for (const candidate of [...values, correction]) {
+		const parsed = parseOffsetMinutes(candidate);
+		if (parsed !== null) {
+			return parsed;
+		}
+		const normalized = normalizeTimezoneCandidate(candidate);
+		for (const name of normalized) {
+			const offset = getOffsetFromTimezoneName(name, referenceDate);
+			if (offset !== null) {
+				return offset;
+			}
+		}
+	}
+	return null;
+}
+
+/**
+ * Resolve the user's timezone name preference from MediaWiki settings.
+ * @returns Timezone name or null if not set.
+ */
+function resolveUserTimezoneName(): string | null {
+	const tz = mw.config.get("wgUserTimezone");
+	if (typeof tz === "string") {
+		const normalized = tz.trim();
+		if (!normalized || normalized.toLowerCase() === "default") {
+			return null;
+		}
+		if (normalized.toLowerCase() === "system" || normalized.toLowerCase() === "local") {
+			const guessed = moment.tz.guess();
+			return guessed || null;
+		}
+		return normalized;
+	}
+	return null;
+}
+
+/**
+ * Get the offset in minutes from a timezone name.
+ * @param timezone - Timezone name.
+ * @param referenceDate - Date for evaluating DST-aware offsets.
+ * @returns Offset in minutes or null if unavailable.
+ */
+function getOffsetFromTimezoneName(timezone: string, referenceDate?: Date): number | null {
+	if (!timezone) {
+		return null;
+	}
+	const numeric = parseOffsetMinutes(timezone);
+	if (numeric !== null) {
+		return numeric;
+	}
+	const candidates = [timezone];
+	const underscoreCandidate = timezone.replace(/_/g, "/");
+	if (underscoreCandidate !== timezone) {
+		candidates.push(underscoreCandidate);
+	}
+	for (const candidate of candidates) {
+		try {
+			const base = referenceDate ? moment(referenceDate) : moment();
+			const zoned = base.tz(candidate);
+			const offset = zoned.utcOffset();
+			if (Number.isFinite(offset)) {
+				return offset;
+			}
+		} catch {
+			// Continue trying other candidates.
+		}
+	}
+	return null;
+}
+
+/**
+ * Normalize a timezone candidate by generating variants.
+ * @param value - Raw timezone string.
+ * @returns Array of normalized timezone candidates.
+ */
+function normalizeTimezoneCandidate(value: string): string[] {
+	const trimmed = value.trim();
+	if (!trimmed) {
+		return [];
+	}
+	const variants = new Set<string>([trimmed]);
+	if (trimmed.includes("_")) {
+		variants.add(trimmed.replace(/_/g, "/"));
+	}
+	return Array.from(variants);
 }
 
 /**

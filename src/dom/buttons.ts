@@ -8,6 +8,7 @@ import {
 	hasUserReacted,
 	removeUserFromEntries,
 } from "./commentors";
+import { attachReactionTooltip } from "./reactionTooltip";
 import {
 	getDiscussionToolsLookup,
 	createMatchingState,
@@ -659,6 +660,7 @@ function saveNewReaction(button: HTMLElement, event: MouseEvent | false) {
 			const buttonClickHandler: EventListener = () => handleReactionClick(button);
 			_handlerRegistry.set(button, buttonClickHandler);
 			button.addEventListener("click", buttonClickHandler);
+			attachReactionTooltip(button);
 		}
 	});
 }
@@ -817,6 +819,7 @@ function bindEvent2ReactionButton(button: HTMLElement) {
 	let buttonClickHandler: EventListener = () => handleReactionClick(button);
 	_handlerRegistry.set(button, buttonClickHandler);
 	button.addEventListener("click", buttonClickHandler);
+	attachReactionTooltip(button);
 
 	// Check if the user has reacted to this
 	if (hasUserReacted(getReactionCommentors(button), state.userName)) {
