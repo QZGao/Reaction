@@ -38,7 +38,6 @@ let timestampMatchers: TimestampMatcher[] | null = null;
 let timestampFormatter: ((date: Date) => string) | null = null;
 let cachedFormatMetadata: TimestampFormatMetadata | null = null;
 let timestampRenderer: ((momentDate: Moment) => string) | null = null;
-let timezoneDebugLogged = false;
 
 interface TimestampFormatMetadata {
 	format: string;
@@ -500,13 +499,6 @@ export function getUserTimezoneOffsetMinutes(referenceDate?: Date): number | nul
 	const timezonePref = resolveUserTimezoneName();
 	const timezoneOffset = timezonePref ? getOffsetFromTimezoneName(timezonePref, referenceDate) : null;
 	const finalOffset = correctionOffset ?? timezoneOffset ?? 0;
-	logTimezoneDebug({
-		correctionRaw: correctionString,
-		correctionOffset,
-		timezonePref,
-		timezoneOffset,
-		finalOffset,
-	});
 	return finalOffset;
 }
 
@@ -700,32 +692,6 @@ function getOffsetFromTimezoneName(timezone: string, referenceDate?: Date): numb
 		}
 	}
 	return null;
-}
-
-interface TimezoneDebugInfo {
-	correctionRaw: string | null;
-	correctionOffset: number | null;
-	timezonePref: string | null;
-	timezoneOffset: number | null;
-	finalOffset: number;
-}
-
-/**
- * Log timezone debug information once per session.
- * @param info - Timezone debug information.
- */
-function logTimezoneDebug(info: TimezoneDebugInfo): void {
-	if (timezoneDebugLogged) {
-		return;
-	}
-	timezoneDebugLogged = true;
-	console.log("[Reaction] Timezone debug information:", {
-		correctionRaw: info.correctionRaw,
-		correctionOffset: info.correctionOffset,
-		timezonePref: info.timezonePref,
-		timezoneOffset: info.timezoneOffset,
-		finalOffset: info.finalOffset,
-	});
 }
 
 /**
