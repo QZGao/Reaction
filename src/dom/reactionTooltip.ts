@@ -256,10 +256,15 @@ function renderEntries(entries: ReactionCommentorEntry[], container: HTMLElement
 		const entryEl = document.createElement("div");
 		entryEl.className = `${TOOLTIP_CLASS}__entry`;
 
-		const userEl = document.createElement("span");
-		userEl.className = `${TOOLTIP_CLASS}__user`;
-		userEl.innerText = entry.user;
-		entryEl.appendChild(userEl);
+		const userLink = document.createElement("a");
+		userLink.className = `${TOOLTIP_CLASS}__user userlink`;
+		userLink.href = mw.util.getUrl(`User:${entry.user}`);
+		userLink.rel = "noopener";
+		userLink.target = "_blank";
+		const userBdi = document.createElement("bdi"); // For RTL usernames.
+		userBdi.innerText = entry.user;
+		userLink.appendChild(userBdi);
+		entryEl.appendChild(userLink);
 
 		if (entry.timestamp) {
 			const timestampEl = document.createElement("span");
