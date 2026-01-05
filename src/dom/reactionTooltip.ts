@@ -39,6 +39,9 @@ export function attachReactionTooltip(button: HTMLElement): void {
 	tooltipButtons.add(button);
 }
 
+/**
+ * Ensure tooltip DOM elements exist.
+ */
 function ensureTooltipElements(): void {
 	if (tooltipContainer) {
 		return;
@@ -63,6 +66,9 @@ function ensureTooltipElements(): void {
 	bindGlobalListeners();
 }
 
+/**
+ * Inject tooltip CSS styles into the document.
+ */
 function injectTooltipStyles(): void {
 	if (stylesInjected) {
 		return;
@@ -136,6 +142,9 @@ function injectTooltipStyles(): void {
 `);
 }
 
+/**
+ * Bind global listeners for tooltip interactions.
+ */
 function bindGlobalListeners(): void {
 	if (globalListenersBound) {
 		return;
@@ -147,6 +156,10 @@ function bindGlobalListeners(): void {
 	window.addEventListener("resize", () => hideTooltip(true));
 }
 
+/**
+ * Handle click event on mobile skin.
+ * @param event - Click event.
+ */
 function handleMobileClick(event: Event): void {
 	const target = event.currentTarget;
 	if (!(target instanceof HTMLElement)) {
@@ -162,6 +175,10 @@ function handleMobileClick(event: Event): void {
 	}
 }
 
+/**
+ * Handle mouse enter or focus event on button.
+ * @param event - Event object.
+ */
 function handleButtonEnter(event: Event): void {
 	if (!(event.currentTarget instanceof HTMLElement)) {
 		return;
@@ -170,10 +187,16 @@ function handleButtonEnter(event: Event): void {
 	showTooltip(event.currentTarget);
 }
 
+/**
+ * Handle mouse leave event on button.
+ */
 function handleButtonLeave(): void {
 	scheduleHide();
 }
 
+/**
+ * Handle mouse leave event on tooltip.
+ */
 function handleTooltipLeave(): void {
 	if (isMobileSkin) {
 		return;
@@ -181,6 +204,10 @@ function handleTooltipLeave(): void {
 	scheduleHide();
 }
 
+/**
+ * Handle document interaction to hide tooltip if necessary.
+ * @param event - Event object.
+ */
 function handleDocumentInteraction(event: Event): void {
 	if (!isTooltipVisible()) {
 		return;
@@ -195,11 +222,17 @@ function handleDocumentInteraction(event: Event): void {
 	hideTooltip(true);
 }
 
+/**
+ * Schedule tooltip hide after delay.
+ */
 function scheduleHide(): void {
 	cancelHide();
 	hideTimer = window.setTimeout(() => hideTooltip(), HIDE_DELAY_MS);
 }
 
+/**
+ * Cancel scheduled tooltip hide.
+ */
 function cancelHide(): void {
 	if (hideTimer !== null) {
 		window.clearTimeout(hideTimer);
@@ -207,6 +240,10 @@ function cancelHide(): void {
 	}
 }
 
+/**
+ * Hide the tooltip.
+ * @param immediate - Whether to hide immediately without transition.
+ */
 function hideTooltip(immediate = false): void {
 	cancelHide();
 	const tooltip = tooltipContainer;
@@ -223,10 +260,19 @@ function hideTooltip(immediate = false): void {
 	activeButton = null;
 }
 
+/**
+ * Check if the tooltip is currently visible.
+ * @returns True if visible, false otherwise.
+ */
 function isTooltipVisible(): boolean {
 	return Boolean(tooltipContainer?.classList.contains(`${TOOLTIP_CLASS}--visible`));
 }
 
+/**
+ * Show the tooltip for a given button.
+ * @param button - Reaction button element.
+ * @returns True if shown successfully, false otherwise.
+ */
 function showTooltip(button: HTMLElement): boolean {
 	const tooltip = tooltipContainer;
 	const content = tooltipContent;
@@ -243,6 +289,11 @@ function showTooltip(button: HTMLElement): boolean {
 	return true;
 }
 
+/**
+ * Render reaction commentor entries into the tooltip content.
+ * @param entries - Array of reaction commentor entries.
+ * @param container - Tooltip content container element.
+ */
 function renderEntries(entries: ReactionCommentorEntry[], container: HTMLElement): void {
 	container.textContent = "";
 	if (entries.length === 0) {
@@ -276,6 +327,10 @@ function renderEntries(entries: ReactionCommentorEntry[], container: HTMLElement
 	}
 }
 
+/**
+ * Position the tooltip relative to the button.
+ * @param button - Reaction button element.
+ */
 function positionTooltip(button: HTMLElement): void {
 	const tooltip = tooltipContainer;
 	if (!tooltip || !tooltipContent) {
