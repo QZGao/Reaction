@@ -1,5 +1,5 @@
 import { addReactionButtons } from "./dom/buttons";
-import { fetchPageProperties } from "./api/client";
+import { fetchPageProperties, doesPageExist } from "./api/client";
 
 interface MagicWordDescriptor {
 	property: string;
@@ -12,6 +12,27 @@ const MAGIC_WORD_SKIP: MagicWordDescriptor[] = [
 ];
 
 let skipCache: boolean | null = null;
+let modulePresenceCache: boolean | null = null;
+
+/**
+ * Check if Module:Reaction exists on the wiki.
+ * @returns Promise resolving to true if the module exists.
+ */
+async function isReactionModuleAvailable(): Promise<boolean> {
+	if (modulePresenceCache !== null) {
+		return modulePresenceCache;
+	}
+	try {
+		modulePresenceCache = await doesPageExist("Module:Reaction");
+		if (!modulePresenceCache) {
+			console.warn("[Reaction] Module:Reaction is missing; skipping initialization.");
+		}
+	} catch (error) {
+		console.error("[Reaction] Failed to verify Module:Reaction availability.", error);
+		modulePresenceCache = true;
+	}
+	return modulePresenceCache;
+}
 
 /**
  * Determine whether the current page should skip Reaction initialization.
@@ -19,6 +40,11 @@ let skipCache: boolean | null = null;
  */
 async function shouldSkipPage(): Promise<boolean> {
 	if (skipCache !== null) {
+		return skipCache;
+	}
+	const hasReactionModule = await isReactionModuleAvailable();
+	if (!hasReactionModule) {
+		skipCache = true;
 		return skipCache;
 	}
 	let propertyNames: Set<string> | null = null;
