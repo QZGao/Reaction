@@ -6,7 +6,7 @@
 			"type": "firefox",
 			"request": "launch",
 			"reAttach": true,
-			"url": "https://en.wikipedia.org/wiki/User_talk:SuperGrey/Reaction_Testing_Ground",
+			"url": "https://zh.wikipedia.org/wiki/User_talk:SuperGrey/Reaction_Testing_Ground",
 			"webRoot": "${workspaceFolder}",
 			"addonPath": "${workspaceFolder}/.debug",
 			"preLaunchTask": "watch-debug-extension",
