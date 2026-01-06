@@ -28,6 +28,18 @@ interface ParsePropertiesResponse {
 	};
 }
 
+interface QueryInfoPage {
+	missing?: boolean;
+	invalid?: boolean;
+	title: string;
+}
+
+interface QueryInfoResponse {
+	query?: {
+		pages?: QueryInfoPage[];
+	};
+}
+
 // MediaWiki API instance cache
 let apiInstance: mw.Api | null = null;
 
@@ -89,6 +101,25 @@ export async function fetchPageProperties(title?: string): Promise<Set<string> |
 		return new Set();
 	}
 	return new Set(names.map((name) => name.toLowerCase()));
+}
+
+/**
+ * Determine whether a given page exists.
+ * @param title - Page title to check.
+ * @returns True if the page exists, false otherwise.
+ */
+export async function doesPageExist(title: string): Promise<boolean> {
+	const response = await getApi().get({
+		action: "query",
+		titles: title,
+		prop: "info",
+		formatversion: 2,
+	}) as QueryInfoResponse;
+	const page = response.query?.pages?.[0];
+	if (!page) {
+		return false;
+	}
+	return !page.missing && !page.invalid;
 }
 
 /**
