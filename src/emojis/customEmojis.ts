@@ -12,7 +12,7 @@ const customEmojis: EmojiSelection[] = [
 		name: "doge",
 		short_names: ["doge"],
 		text: "File:Doge.png",
-		imageUrl: "https://upload.wikimedia.org/wikipedia/commons/0/05/Doge.png",
+		imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Doge.svg/40px-Doge.svg.png",
 		keywords: ["doge"],
 	},
 	{
