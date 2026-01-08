@@ -7,6 +7,7 @@ import {
 } from "../vueCompat";
 import { Picker, EmojiIndex } from "emoji-mart-vue-fast";
 import customEmojis from "../emojis/customEmojis";
+import seedRecentEmojis from "../emojis/seedRecentEmojis";
 import type { PickerProps, EmojiIndex as EmojiIndexType } from "emoji-mart-vue-fast";
 import emojiData from "emoji-mart-vue-fast/data/all.json";
 import emojiMartStyles from "emoji-mart-vue-fast/css/emoji-mart.css";
@@ -161,6 +162,7 @@ function ensureEmojiIndex(): EmojiIndexType {
  * @returns Emoji index instance.
  */
 function buildEmojiIndex(): EmojiIndexType {
+	seedFrequentlyUsed();
 	return new (EmojiIndex as EmojiIndexConstructor)(emojiData, {
 		exclude: ["flags"],
 		custom: customEmojis,
@@ -174,6 +176,31 @@ function buildEmojiIndex(): EmojiIndexType {
 function refreshEmojiIndex(): EmojiIndexType {
 	emojiIndex = buildEmojiIndex();
 	return emojiIndex;
+}
+
+/**
+ * Seed the emoji-mart frequently used list for first-time users.
+ */
+function seedFrequentlyUsed(): void {
+	if (typeof window === "undefined" || !("localStorage" in window)) {
+		return;
+	}
+	const storage = window.localStorage;
+	const frequentlyKey = "emoji-mart.frequently";
+	if (storage.getItem(frequentlyKey)) {
+		return;
+	}
+	const seeded = seedRecentEmojis;
+	if (!seeded.length) {
+		return;
+	}
+	const frequencyMap: Record<string, number> = {};
+	const length = seeded.length;
+	for (let i = 0; i < length; i += 1) {
+		frequencyMap[seeded[i]] = Math.floor((length - i) / 4) + 1;
+	}
+	storage.setItem(frequentlyKey, JSON.stringify(frequencyMap));
+	storage.setItem("emoji-mart.last", JSON.stringify(seeded[0]));
 }
 
 /**
