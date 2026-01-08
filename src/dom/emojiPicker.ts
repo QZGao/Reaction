@@ -100,6 +100,7 @@ let currentInput: HTMLInputElement | null = null;
 let emojiIndex: EmojiIndexType | null = null;
 let styleElement: HTMLStyleElement | null = null;
 let pendingAnimationFrame = 0;
+let pendingIndexRefresh = 0;
 let documentClickListener: ((event: MouseEvent) => void) | null = null;
 
 /**
@@ -150,12 +151,47 @@ function getScrollLeft(): number {
  */
 function ensureEmojiIndex(): EmojiIndexType {
 	if (!emojiIndex) {
-		emojiIndex = new (EmojiIndex as EmojiIndexConstructor)(emojiData, {
-			exclude: ["flags"],
-			custom: customEmojis,
-		});
+		emojiIndex = buildEmojiIndex();
 	}
 	return emojiIndex;
+}
+
+/**
+ * Build a fresh emoji index.
+ * @returns Emoji index instance.
+ */
+function buildEmojiIndex(): EmojiIndexType {
+	return new (EmojiIndex as EmojiIndexConstructor)(emojiData, {
+		exclude: ["flags"],
+		custom: customEmojis,
+	});
+}
+
+/**
+ * Rebuild the emoji index to refresh recent items.
+ * @returns Emoji index instance.
+ */
+function refreshEmojiIndex(): EmojiIndexType {
+	emojiIndex = buildEmojiIndex();
+	return emojiIndex;
+}
+
+/**
+ * Schedule a refresh of the emoji index after selection updates.
+ * @param onRefresh - Callback to receive the refreshed index.
+ */
+function scheduleEmojiIndexRefresh(onRefresh: (index: EmojiIndexType) => void): void {
+	if (typeof window === "undefined") {
+		onRefresh(refreshEmojiIndex());
+		return;
+	}
+	if (pendingIndexRefresh) {
+		window.cancelAnimationFrame(pendingIndexRefresh);
+	}
+	pendingIndexRefresh = window.requestAnimationFrame(() => {
+		pendingIndexRefresh = 0;
+		onRefresh(refreshEmojiIndex());
+	});
 }
 
 /**
@@ -266,6 +302,10 @@ function destroyPicker(): void {
 	currentInput = null;
 	detachViewportListeners();
 	detachDocumentClickListener();
+	if (pendingIndexRefresh && typeof window !== "undefined") {
+		window.cancelAnimationFrame(pendingIndexRefresh);
+		pendingIndexRefresh = 0;
+	}
 }
 
 type PickerPlacement = "bottom" | "top" | "right" | "left";
@@ -400,41 +440,46 @@ function updatePickerPosition(anchor: HTMLElement, container: HTMLElement): void
  * @returns Picker application handle.
  */
 function createPickerApp(): PickerAppHandle {
-	const dataIndex: EmojiIndexType = ensureEmojiIndex();
-	const onSelect: (emoji: EmojiSelection) => void = (emoji: EmojiSelection) => {
-		const value = getCustomEmojiText(emoji) ?? emoji?.native ?? emoji?.colons ?? "";
-		if (!value || !currentInput) {
-			return;
-		}
-		currentInput.value = value;
-		const inputEvent = new Event("input", { bubbles: true });
-		currentInput.dispatchEvent(inputEvent);
-		currentInput.focus({ preventScroll: true });
-	};
-
-	const pickerProps: PickerProps = {
-		data: dataIndex,
-		custom: customEmojis,
-		native: true,
-		autoFocus: false,
-		showSearch: true,
-		showPreview: false,
-		showCategories: true,
-		i18n: createPickerI18nMessages(),
-		perLine: 10,
-		emojiSize: 24,
-		emojiTooltip: true,
-		skin: null,
-		onSelect,
-		infiniteScroll: false,
-	};
 	const hostComponent = defineCompatComponent(() => {
 		const searchValue = ref("");
-		const renderSearchSlot = createSearchSlotRenderer(searchValue);
-		return () =>
-			compatRender(Picker, pickerProps, {
-				searchTemplate: (slotProps: PickerSearchSlotProps) => renderSearchSlot(slotProps),
+		const dataIndex = ref<EmojiIndexType>(ensureEmojiIndex());
+		const onSelect: (emoji: EmojiSelection) => void = (emoji: EmojiSelection) => {
+			const value = getCustomEmojiText(emoji) ?? emoji?.native ?? emoji?.colons ?? "";
+			if (!value || !currentInput) {
+				return;
+			}
+			currentInput.value = value;
+			const inputEvent = new Event("input", { bubbles: true });
+			currentInput.dispatchEvent(inputEvent);
+			currentInput.focus({ preventScroll: true });
+			scheduleEmojiIndexRefresh((nextIndex) => {
+				dataIndex.value = nextIndex;
 			});
+		};
+		const renderSearchSlot = createSearchSlotRenderer(searchValue);
+			return () =>
+			compatRender(
+				Picker,
+				{
+					data: dataIndex.value,
+					custom: customEmojis,
+					native: true,
+					autoFocus: false,
+					showSearch: true,
+					showPreview: false,
+					showCategories: true,
+					i18n: createPickerI18nMessages(),
+					perLine: 10,
+					emojiSize: 24,
+					emojiTooltip: true,
+					skin: null,
+					onSelect,
+					infiniteScroll: false,
+				} as PickerProps,
+				{
+					searchTemplate: (slotProps: PickerSearchSlotProps) => renderSearchSlot(slotProps),
+				},
+			);
 	});
 	const app: CompatApp<Element> = createCompatApp(hostComponent);
 	const handle: PickerAppHandle = {
