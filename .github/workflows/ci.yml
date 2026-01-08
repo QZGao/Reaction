@@ -30,7 +30,7 @@ jobs:
         run: npm run lint
 
       - name: Run build
-        run: npm run build
+        run: npm run build:ci
 
   test:
     runs-on: ubuntu-latest

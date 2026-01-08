@@ -10,7 +10,7 @@ const projectRoot = path.join(__dirname, "..");
 const watch = process.argv.includes('--watch');
 const debug = process.argv.includes('--debug');
 const pkgJson = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
-const outFile = path.join(projectRoot, debug ? '.debug' : 'dist', 'bundled.js');
+const outFile = path.join(projectRoot, debug ? '.debug' : 'dist', 'Gadget-Reaction.js');
 
 const I18N_VIRTUAL_ID = 'virtual:i18n';
 const EMOJI_I18N_VIRTUAL_ID = 'virtual:emoji-i18n';
