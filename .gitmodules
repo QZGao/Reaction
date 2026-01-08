@@ -1,0 +1,3 @@
+[submodule "vendor/emoji-mart-vue-fast"]
+	path = vendor/emoji-mart-vue-fast
+	url = https://github.com/QZGao/emoji-mart-vue-fast
