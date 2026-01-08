@@ -38,7 +38,11 @@ const customEmojiDefinitions: CustomEmojiDefinition[] = [
 		short_names: ["cyberduck"],
 		text: "File:Cyberduck_icon.png",
 		imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Cyberduck_icon.png/40px-Cyberduck_icon.png",
-		keywords: ["cyberduck"],
+		keywords: ["cyberduck", "duck test"],
+		i18n: {
+			"zh-hans": { name: "鸭子测试", keywords: ["鸭子测试", "一望而知", "cyberduck", "duck test"] },
+			"zh-hant": { name: "鴨子測試", keywords: ["鴨子測試", "一望而知", "cyberduck", "duck test"] },
+		},
 	},
 	{
 		name: "wikipedia",
