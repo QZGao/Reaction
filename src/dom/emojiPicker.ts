@@ -6,7 +6,7 @@ import {
 	type CompatApp,
 } from "../vueCompat";
 import { Picker, EmojiIndex } from "emoji-mart-vue-fast";
-import customEmojis from "../emojis/customEmojis";
+import { getCustomEmojis, getCustomEmojiTextMap } from "../emojis/customEmojis";
 import seedRecentEmojis from "../emojis/seedRecentEmojis";
 import type { PickerProps, EmojiIndex as EmojiIndexType } from "emoji-mart-vue-fast";
 import emojiData from "emoji-mart-vue-fast/data/all.json";
@@ -17,13 +17,7 @@ import { getLocale, resolveEmojiI18nData, t, type EmojiI18nData } from "../i18n"
 const PICKER_MARGIN_PX = 8;
 const PICKER_CLASS = "reaction-emoji-picker";
 const STYLE_ELEMENT_ID = "reaction-emoji-picker-styles";
-const customEmojiTextMap: Record<string, string> = customEmojis.reduce<Record<string, string>>((acc, emoji) => {
-	const key = emoji.short_names?.[0];
-	if (key && typeof emoji.text === "string" && emoji.text.length > 0) {
-		acc[key] = emoji.text;
-	}
-	return acc;
-}, {});
+const customEmojiTextMap = getCustomEmojiTextMap();
 
 /**
  * Get the text representation for a custom emoji selection.
@@ -164,10 +158,11 @@ function ensureEmojiIndex(): EmojiIndexType {
  */
 function buildEmojiIndex(): EmojiIndexType {
 	seedFrequentlyUsed();
+	const locale = getLocale();
 	const emojiI18n = resolveEmojiI18nData(getLocale()) ?? undefined;
 	return new (EmojiIndex as EmojiIndexConstructor)(emojiData, {
 		exclude: ["flags"],
-		custom: customEmojis,
+		custom: getCustomEmojis(locale),
 		emojiI18n,
 	});
 }
@@ -487,12 +482,12 @@ function createPickerApp(): PickerAppHandle {
 			});
 		};
 		const renderSearchSlot = createSearchSlotRenderer(searchValue);
-			return () =>
+		return () =>
 			compatRender(
 				Picker,
 				{
 					data: dataIndex.value,
-					custom: customEmojis,
+					custom: getCustomEmojis(getLocale()),
 					native: true,
 					autoFocus: false,
 					showSearch: true,
