@@ -12,7 +12,7 @@ import type { PickerProps, EmojiIndex as EmojiIndexType } from "emoji-mart-vue-f
 import emojiData from "emoji-mart-vue-fast/data/all.json";
 import emojiMartStyles from "emoji-mart-vue-fast/css/emoji-mart.css";
 import { ref, type Ref, type ComponentPublicInstance } from "vue";
-import { t } from "../i18n";
+import { getLocale, resolveEmojiI18nData, t, type EmojiI18nData } from "../i18n";
 
 const PICKER_MARGIN_PX = 8;
 const PICKER_CLASS = "reaction-emoji-picker";
@@ -77,6 +77,7 @@ type EmojiIndexConstructor = new (data: typeof emojiData, options?: {
 	include?: string[];
 	exclude?: string[];
 	custom?: EmojiSelection[];
+	emojiI18n?: EmojiI18nData;
 }) => EmojiIndexType;
 
 interface PickerSearchSlotProps {
@@ -163,9 +164,11 @@ function ensureEmojiIndex(): EmojiIndexType {
  */
 function buildEmojiIndex(): EmojiIndexType {
 	seedFrequentlyUsed();
+	const emojiI18n = resolveEmojiI18nData(getLocale()) ?? undefined;
 	return new (EmojiIndex as EmojiIndexConstructor)(emojiData, {
 		exclude: ["flags"],
 		custom: customEmojis,
+		emojiI18n,
 	});
 }
 

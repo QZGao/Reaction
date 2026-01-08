@@ -1,4 +1,5 @@
-import rawCatalogues from 'virtual:i18n-catalogues';
+import rawCatalogues from 'virtual:i18n';
+import rawEmojiI18n from 'virtual:emoji-i18n';
 import { encodeTitle, normalizeTitle } from './utils';
 
 type ReplacementValue = string | number;
@@ -18,6 +19,13 @@ export type RichMessageSegment =
 const fallbackLocale = resolveFallbackLocale();
 let activeLocale: LocaleCode = detectInitialLocale();
 const REACTION_PREFIX = "[Reaction] ";
+
+export interface EmojiI18nData {
+	emojis?: Record<string, { name?: string; keywords?: string[] }>;
+	aliases?: Record<string, string>;
+}
+
+const emojiI18nByLocale: Record<string, EmojiI18nData> = normalizeEmojiI18n(rawEmojiI18n);
 
 /**
  * Access the global MediaWiki instance if available.
@@ -213,11 +221,73 @@ function normalizeLocaleCode(code?: string): string | undefined {
 }
 
 /**
+ * Normalize raw emoji i18n data into the expected structure.
+ * @param input - Raw emoji i18n data.
+ * @returns Normalized emoji i18n map.
+ */
+function normalizeEmojiI18n(input: unknown): Record<string, EmojiI18nData> {
+	if (!isPlainRecord(input)) {
+		return {};
+	}
+	const result: Record<string, EmojiI18nData> = {};
+	for (const [locale, payload] of Object.entries(input)) {
+		if (!isPlainRecord(payload)) {
+			continue;
+		}
+		const emojis = isPlainRecord(payload.emojis)
+			? normalizeEmojiEntries(payload.emojis)
+			: undefined;
+		const aliases = isPlainRecord(payload.aliases)
+			? normalizeEmojiAliases(payload.aliases)
+			: undefined;
+		result[locale.toLowerCase()] = { emojis, aliases };
+	}
+	return result;
+}
+
+/**
+ * Normalize emoji entries for a locale.
+ * @param input - Raw emoji entries.
+ * @returns Normalized emoji entries.
+ */
+function normalizeEmojiEntries(input: Record<string, unknown>): Record<string, { name?: string; keywords?: string[] }> {
+	const result: Record<string, { name?: string; keywords?: string[] }> = {};
+	for (const [id, value] of Object.entries(input)) {
+		if (!isPlainRecord(value)) {
+			continue;
+		}
+		const name = typeof value.name === 'string' ? value.name : undefined;
+		const keywords = Array.isArray(value.keywords)
+			? value.keywords.filter((keyword): keyword is string => typeof keyword === 'string')
+			: undefined;
+		if (name || (keywords && keywords.length > 0)) {
+			result[id] = { name, keywords };
+		}
+	}
+	return result;
+}
+
+/**
+ * Normalize emoji alias entries for a locale.
+ * @param input - Raw emoji alias entries.
+ * @returns Normalized emoji alias entries.
+ */
+function normalizeEmojiAliases(input: Record<string, unknown>): Record<string, string> {
+	const result: Record<string, string> = {};
+	for (const [alias, value] of Object.entries(input)) {
+		if (typeof value === 'string') {
+			result[alias] = value;
+		}
+	}
+	return result;
+}
+
+/**
  * Translate a message key into the active locale, optionally applying parameters.
  */
 export function t(key: MessageKey, params?: MessageParams): string {
-    const template = resolveTemplate(key, activeLocale);
-    return format(template, params);
+	const template = resolveTemplate(key, activeLocale);
+	return format(template, params);
 }
 
 /**
@@ -227,8 +297,8 @@ export function t(key: MessageKey, params?: MessageParams): string {
  * @returns Prefixed localized string.
  */
 export function tReaction(key: MessageKey, params?: MessageParams): string {
-    const message = t(key, params);
-    return message.startsWith(REACTION_PREFIX) ? message : `${REACTION_PREFIX}${message}`;
+	const message = t(key, params);
+	return message.startsWith(REACTION_PREFIX) ? message : `${REACTION_PREFIX}${message}`;
 }
 
 /**
@@ -255,6 +325,21 @@ export function refreshLocale(): void {
  */
 export function getLocale(): LocaleCode {
 	return activeLocale;
+}
+
+/**
+ * Get the MediaWiki locale fallback chain used for i18n resolution.
+ * @returns Array of locale codes.
+ */
+export function resolveEmojiI18nData(locale: LocaleCode): EmojiI18nData | null {
+	const candidates = [locale, ...getFallbackCandidates()];
+	for (const candidate of candidates) {
+		const normalized = candidate.toLowerCase();
+		if (Object.prototype.hasOwnProperty.call(emojiI18nByLocale, normalized)) {
+			return emojiI18nByLocale[normalized];
+		}
+	}
+	return null;
 }
 
 /**

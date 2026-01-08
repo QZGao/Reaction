@@ -3,12 +3,12 @@ import path from 'node:path';
 import type { Plugin } from 'vite';
 import { configDefaults, defineConfig } from 'vitest/config';
 
-const I18N_VIRTUAL_ID = 'virtual:i18n-catalogues';
+const I18N_VIRTUAL_ID = 'virtual:i18n';
 const I18N_DIR = path.resolve(process.cwd(), 'i18n');
 
 function i18nCataloguesPlugin(): Plugin {
 	return {
-		name: 'reaction-vitest-i18n-catalogues',
+		name: 'reaction-vitest-i18n',
 		resolveId(id) {
 			if (id === I18N_VIRTUAL_ID) {
 				return id;
