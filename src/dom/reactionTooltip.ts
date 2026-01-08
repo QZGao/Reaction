@@ -1,10 +1,12 @@
 import { t } from "../i18n";
 import { convertTimestampToUserTimezone } from "../utils";
 import { getReactionCommentors, type ReactionCommentorEntry } from "./commentors";
+import state from "../state";
 
 const TOOLTIP_CLASS = "reaction-tooltip";
 const isMobileSkin = (mw.config.get("skin") as string | undefined) === "minerva";
 const tooltipButtons = new WeakSet<HTMLElement>();
+const canReact = Boolean(state.userName) && !state.isTempUser;
 
 let tooltipContainer: HTMLDivElement | null = null;
 let tooltipContent: HTMLDivElement | null = null;
@@ -125,6 +127,11 @@ function injectTooltipStyles(): void {
 	font-size: 0.78em;
 	color: var(--color-subtle, #54595d);
 	font-style: italic;
+}
+.${TOOLTIP_CLASS}__hint {
+	margin-top: 6px;
+	font-size: 0.78em;
+	color: var(--color-subtle, #54595d);
 }
 .${TOOLTIP_CLASS}__arrow {
 	position: absolute;
@@ -296,6 +303,9 @@ function showTooltip(button: HTMLElement): boolean {
  */
 function renderEntries(entries: ReactionCommentorEntry[], container: HTMLElement): void {
 	container.textContent = "";
+	if (!canReact) {
+		appendLoginHint(container);
+	}
 	if (entries.length === 0) {
 		const empty = document.createElement("div");
 		empty.className = `${TOOLTIP_CLASS}__empty`;
@@ -325,6 +335,17 @@ function renderEntries(entries: ReactionCommentorEntry[], container: HTMLElement
 		}
 		container.appendChild(entryEl);
 	}
+}
+
+/**
+ * Append a login hint to the tooltip content.
+ * @param container - Tooltip content container element.
+ */
+function appendLoginHint(container: HTMLElement): void {
+	const hint = document.createElement("div");
+	hint.className = `${TOOLTIP_CLASS}__hint`;
+	hint.textContent = t("dom.tooltips.login_to_react");
+	container.appendChild(hint);
 }
 
 /**
