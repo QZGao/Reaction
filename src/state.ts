@@ -8,6 +8,10 @@ class State {
 	 * Logged-in user name from MediaWiki configuration.
 	 */
 	userName: string | null = mw.config.get("wgUserName");
+	/**
+	 * Temporary account flag from MediaWiki configuration.
+	 */
+	isTempUser: boolean = Boolean(mw.config.get("wgUserIsTemp"));
 
 	/**
 	 * Current page title from MediaWiki configuration.

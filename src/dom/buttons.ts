@@ -27,6 +27,7 @@ import { showEmojiPicker, hideEmojiPicker } from "./emojiPicker";
  * @private
  */
 const _handlerRegistry = new WeakMap<HTMLElement, EventListener>();
+const canReact = Boolean(state.userName) && !state.isTempUser;
 
 /**
  * Tracks the timestamp node associated with each button via WeakMap.
@@ -452,6 +453,9 @@ function getCommentContext(button: HTMLElement): CommentContext | null {
  * @param button {HTMLElement} - Reaction button element.
  */
 function handleReactionClick(button: HTMLElement) {
+	if (!canReact) {
+		return;
+	}
 	if (button.classList.contains("reaction-new")) {
 		// For "new reaction" buttons, enter editable mode.
 		addNewReaction(button);
@@ -816,10 +820,12 @@ function bindEvent2ReactionButton(button: HTMLElement) {
 	if (_handlerRegistry.has(button)) {
 		return;
 	}
-	let buttonClickHandler: EventListener = () => handleReactionClick(button);
-	_handlerRegistry.set(button, buttonClickHandler);
-	button.addEventListener("click", buttonClickHandler);
 	attachReactionTooltip(button);
+	if (canReact) {
+		let buttonClickHandler: EventListener = () => handleReactionClick(button);
+		_handlerRegistry.set(button, buttonClickHandler);
+		button.addEventListener("click", buttonClickHandler);
+	}
 
 	// Check if the user has reacted to this
 	if (hasUserReacted(getReactionCommentors(button), state.userName)) {
@@ -959,6 +965,9 @@ function resolveTimestampForNode(node: HTMLElement): HTMLElement | null {
  */
 function insertNewReactionBefore(target: HTMLElement, timestamp?: HTMLElement | null): boolean {
 	if (!target.parentNode) {
+		return false;
+	}
+	if (!canReact) {
 		return false;
 	}
 	if (isInExcludedArea(target)) {

@@ -14,7 +14,7 @@ const mockModule = vi.mock as unknown as (
 	options: { virtual?: boolean }
 ) => void;
 
-mockModule('virtual:i18n-catalogues', () => ({ default: baseCatalogues }), { virtual: true });
+mockModule('virtual:i18n', () => ({ default: baseCatalogues }), { virtual: true });
 
 afterEach(() => {
 	Reflect.deleteProperty(globalThis as { mw?: unknown }, 'mw');

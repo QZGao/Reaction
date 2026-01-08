@@ -10,6 +10,7 @@ export interface EmojiSelection {
 	colons?: string;
 	native?: string;
 	short_names?: string[];
+	i18nName?: string | null;
 	skin?: number | null;
 	text?: string;
 	emoticons?: string[];
@@ -17,10 +18,16 @@ export interface EmojiSelection {
 	imageUrl?: string;
 }
 
+export interface EmojiI18nData {
+	emojis?: Record<string, { name?: string; keywords?: string[] }>;
+	aliases?: Record<string, string>;
+}
+
 export interface EmojiIndexOptions {
 	include?: string[];
 	exclude?: string[];
 	custom?: EmojiSelection[];
+	emojiI18n?: EmojiI18nData;
 }
 
 export class EmojiIndex {

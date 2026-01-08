@@ -33,7 +33,7 @@
 	"dependencies": {
 		"@types/moment-timezone": "^0.5.13",
 		"@vue/compat": "^3.5.13",
-		"emoji-mart-vue-fast": "^15.0.5",
+		"emoji-mart-vue-fast": "file:vendor/emoji-mart-vue-fast",
 		"moment-timezone": "^0.6.0"
 	}
 }

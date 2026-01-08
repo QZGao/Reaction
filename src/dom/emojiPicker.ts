@@ -6,23 +6,18 @@ import {
 	type CompatApp,
 } from "../vueCompat";
 import { Picker, EmojiIndex } from "emoji-mart-vue-fast";
-import customEmojis from "../emojis/customEmojis";
+import { getCustomEmojis, getCustomEmojiTextMap } from "../emojis/customEmojis";
+import seedRecentEmojis from "../emojis/seedRecentEmojis";
 import type { PickerProps, EmojiIndex as EmojiIndexType } from "emoji-mart-vue-fast";
 import emojiData from "emoji-mart-vue-fast/data/all.json";
 import emojiMartStyles from "emoji-mart-vue-fast/css/emoji-mart.css";
 import { ref, type Ref, type ComponentPublicInstance } from "vue";
-import { t } from "../i18n";
+import { getLocale, resolveEmojiI18nData, t, type EmojiI18nData } from "../i18n";
 
 const PICKER_MARGIN_PX = 8;
 const PICKER_CLASS = "reaction-emoji-picker";
 const STYLE_ELEMENT_ID = "reaction-emoji-picker-styles";
-const customEmojiTextMap: Record<string, string> = customEmojis.reduce<Record<string, string>>((acc, emoji) => {
-	const key = emoji.short_names?.[0];
-	if (key && typeof emoji.text === "string" && emoji.text.length > 0) {
-		acc[key] = emoji.text;
-	}
-	return acc;
-}, {});
+const customEmojiTextMap = getCustomEmojiTextMap();
 
 /**
  * Get the text representation for a custom emoji selection.
@@ -76,6 +71,7 @@ type EmojiIndexConstructor = new (data: typeof emojiData, options?: {
 	include?: string[];
 	exclude?: string[];
 	custom?: EmojiSelection[];
+	emojiI18n?: EmojiI18nData;
 }) => EmojiIndexType;
 
 interface PickerSearchSlotProps {
@@ -100,6 +96,7 @@ let currentInput: HTMLInputElement | null = null;
 let emojiIndex: EmojiIndexType | null = null;
 let styleElement: HTMLStyleElement | null = null;
 let pendingAnimationFrame = 0;
+let pendingIndexRefresh = 0;
 let documentClickListener: ((event: MouseEvent) => void) | null = null;
 
 /**
@@ -150,12 +147,76 @@ function getScrollLeft(): number {
  */
 function ensureEmojiIndex(): EmojiIndexType {
 	if (!emojiIndex) {
-		emojiIndex = new (EmojiIndex as EmojiIndexConstructor)(emojiData, {
-			exclude: ["flags"],
-			custom: customEmojis,
-		});
+		emojiIndex = buildEmojiIndex();
 	}
 	return emojiIndex;
+}
+
+/**
+ * Build a fresh emoji index.
+ * @returns Emoji index instance.
+ */
+function buildEmojiIndex(): EmojiIndexType {
+	seedFrequentlyUsed();
+	const locale = getLocale();
+	const emojiI18n = resolveEmojiI18nData(getLocale()) ?? undefined;
+	return new (EmojiIndex as EmojiIndexConstructor)(emojiData, {
+		exclude: ["flags"],
+		custom: getCustomEmojis(locale),
+		emojiI18n,
+	});
+}
+
+/**
+ * Rebuild the emoji index to refresh recent items.
+ * @returns Emoji index instance.
+ */
+function refreshEmojiIndex(): EmojiIndexType {
+	emojiIndex = buildEmojiIndex();
+	return emojiIndex;
+}
+
+/**
+ * Seed the emoji-mart frequently used list for first-time users.
+ */
+function seedFrequentlyUsed(): void {
+	if (typeof window === "undefined" || !("localStorage" in window)) {
+		return;
+	}
+	const storage = window.localStorage;
+	const frequentlyKey = "emoji-mart.frequently";
+	if (storage.getItem(frequentlyKey)) {
+		return;
+	}
+	const seeded = seedRecentEmojis;
+	if (!seeded.length) {
+		return;
+	}
+	const frequencyMap: Record<string, number> = {};
+	const length = seeded.length;
+	for (let i = 0; i < length; i += 1) {
+		frequencyMap[seeded[i]] = Math.floor((length - i) / 4) + 1;
+	}
+	storage.setItem(frequentlyKey, JSON.stringify(frequencyMap));
+	storage.setItem("emoji-mart.last", JSON.stringify(seeded[0]));
+}
+
+/**
+ * Schedule a refresh of the emoji index after selection updates.
+ * @param onRefresh - Callback to receive the refreshed index.
+ */
+function scheduleEmojiIndexRefresh(onRefresh: (index: EmojiIndexType) => void): void {
+	if (typeof window === "undefined") {
+		onRefresh(refreshEmojiIndex());
+		return;
+	}
+	if (pendingIndexRefresh) {
+		window.cancelAnimationFrame(pendingIndexRefresh);
+	}
+	pendingIndexRefresh = window.requestAnimationFrame(() => {
+		pendingIndexRefresh = 0;
+		onRefresh(refreshEmojiIndex());
+	});
 }
 
 /**
@@ -266,6 +327,10 @@ function destroyPicker(): void {
 	currentInput = null;
 	detachViewportListeners();
 	detachDocumentClickListener();
+	if (pendingIndexRefresh && typeof window !== "undefined") {
+		window.cancelAnimationFrame(pendingIndexRefresh);
+		pendingIndexRefresh = 0;
+	}
 }
 
 type PickerPlacement = "bottom" | "top" | "right" | "left";
@@ -400,41 +465,46 @@ function updatePickerPosition(anchor: HTMLElement, container: HTMLElement): void
  * @returns Picker application handle.
  */
 function createPickerApp(): PickerAppHandle {
-	const dataIndex: EmojiIndexType = ensureEmojiIndex();
-	const onSelect: (emoji: EmojiSelection) => void = (emoji: EmojiSelection) => {
-		const value = getCustomEmojiText(emoji) ?? emoji?.native ?? emoji?.colons ?? "";
-		if (!value || !currentInput) {
-			return;
-		}
-		currentInput.value = value;
-		const inputEvent = new Event("input", { bubbles: true });
-		currentInput.dispatchEvent(inputEvent);
-		currentInput.focus({ preventScroll: true });
-	};
-
-	const pickerProps: PickerProps = {
-		data: dataIndex,
-		custom: customEmojis,
-		native: true,
-		autoFocus: false,
-		showSearch: true,
-		showPreview: false,
-		showCategories: true,
-		i18n: createPickerI18nMessages(),
-		perLine: 10,
-		emojiSize: 24,
-		emojiTooltip: true,
-		skin: null,
-		onSelect,
-		infiniteScroll: false,
-	};
 	const hostComponent = defineCompatComponent(() => {
 		const searchValue = ref("");
+		const dataIndex = ref<EmojiIndexType>(ensureEmojiIndex());
+		const onSelect: (emoji: EmojiSelection) => void = (emoji: EmojiSelection) => {
+			const value = getCustomEmojiText(emoji) ?? emoji?.native ?? emoji?.colons ?? "";
+			if (!value || !currentInput) {
+				return;
+			}
+			currentInput.value = value;
+			const inputEvent = new Event("input", { bubbles: true });
+			currentInput.dispatchEvent(inputEvent);
+			currentInput.focus({ preventScroll: true });
+			scheduleEmojiIndexRefresh((nextIndex) => {
+				dataIndex.value = nextIndex;
+			});
+		};
 		const renderSearchSlot = createSearchSlotRenderer(searchValue);
 		return () =>
-			compatRender(Picker, pickerProps, {
-				searchTemplate: (slotProps: PickerSearchSlotProps) => renderSearchSlot(slotProps),
-			});
+			compatRender(
+				Picker,
+				{
+					data: dataIndex.value,
+					custom: getCustomEmojis(getLocale()),
+					native: true,
+					autoFocus: false,
+					showSearch: true,
+					showPreview: false,
+					showCategories: true,
+					i18n: createPickerI18nMessages(),
+					perLine: 10,
+					emojiSize: 24,
+					emojiTooltip: true,
+					skin: null,
+					onSelect,
+					infiniteScroll: false,
+				} as PickerProps,
+				{
+					searchTemplate: (slotProps: PickerSearchSlotProps) => renderSearchSlot(slotProps),
+				},
+			);
 	});
 	const app: CompatApp<Element> = createCompatApp(hostComponent);
 	const handle: PickerAppHandle = {

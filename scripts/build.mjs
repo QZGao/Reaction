@@ -12,11 +12,13 @@ const debug = process.argv.includes('--debug');
 const pkgJson = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
 const outFile = path.join(projectRoot, debug ? '.debug' : 'dist', 'bundled.js');
 
-const I18N_VIRTUAL_ID = 'virtual:i18n-catalogues';
+const I18N_VIRTUAL_ID = 'virtual:i18n';
+const EMOJI_I18N_VIRTUAL_ID = 'virtual:emoji-i18n';
 const i18nDir = path.join(projectRoot, 'i18n');
+const emojiI18nDir = path.join(projectRoot, 'emoji-i18n');
 
 const i18nCatalogPlugin = {
-	name: 'i18n-catalogues',
+	name: 'i18n',
 	setup(build) {
 		build.onResolve({ filter: new RegExp(`^${I18N_VIRTUAL_ID}$`) }, () => ({
 			path: I18N_VIRTUAL_ID,
@@ -60,6 +62,51 @@ export default catalogues;
 	}
 };
 
+const emojiI18nPlugin = {
+	name: 'emoji-i18n',
+	setup(build) {
+		build.onResolve({ filter: new RegExp(`^${EMOJI_I18N_VIRTUAL_ID}$`) }, () => ({
+			path: EMOJI_I18N_VIRTUAL_ID,
+			namespace: 'emoji-i18n'
+		}));
+
+		build.onLoad({ filter: /.*/, namespace: 'emoji-i18n' }, async () => {
+			const entries = await fs.promises.readdir(emojiI18nDir, { withFileTypes: true });
+			const jsonFiles = entries
+				.filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+				.map((entry) => entry.name)
+				.sort();
+
+			const imports = jsonFiles
+				.map((file, index) => `import locale${index} from './${file}';`)
+				.join('\n');
+
+			const mappings = jsonFiles
+				.map((file, index) => {
+					const locale = path.basename(file, '.json');
+					return `\t${JSON.stringify(locale)}: locale${index}`;
+				})
+				.join(',\n');
+
+			const contents = `${imports}
+const emojiI18n = {
+${mappings}
+};
+
+export default emojiI18n;
+`;
+
+			return {
+				contents,
+				loader: 'ts',
+				resolveDir: emojiI18nDir,
+				watchFiles: jsonFiles.map((file) => path.join(emojiI18nDir, file)),
+				watchDirs: [emojiI18nDir]
+			};
+		});
+	}
+};
+
 const createBuildOptions = () => {
 	const timestamp = new Date().toISOString();
 	return {
@@ -71,7 +118,7 @@ const createBuildOptions = () => {
 		target: ['es2017'],
 		minify: !debug,
 		sourcemap: debug ? 'inline' : false,
-		plugins: [i18nCatalogPlugin],
+		plugins: [i18nCatalogPlugin, emojiI18nPlugin],
 		define: {
 			__VUE_OPTIONS_API__: 'true',
 			__VUE_PROD_DEVTOOLS__: 'false',
