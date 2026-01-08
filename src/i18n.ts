@@ -7,7 +7,7 @@ export type MessageParams = ReplacementValue[];
 
 type CatalogueMap = Record<string, Record<string, string>>;
 
-const catalogues: CatalogueMap = normalizeCatalogues(rawCatalogues);
+let catalogues: CatalogueMap = normalizeCatalogues(rawCatalogues);
 
 export type LocaleCode = Extract<keyof typeof catalogues, string>;
 export type MessageKey = string;
@@ -16,7 +16,7 @@ export type RichMessageSegment =
 	| { type: 'text'; text: string }
 	| { type: 'link'; text: string; href: string };
 
-const fallbackLocale = resolveFallbackLocale();
+let fallbackLocale = resolveFallbackLocale();
 let activeLocale: LocaleCode = detectInitialLocale();
 const REACTION_PREFIX = "[Reaction] ";
 
@@ -25,7 +25,12 @@ export interface EmojiI18nData {
 	aliases?: Record<string, string>;
 }
 
-const emojiI18nByLocale: Record<string, EmojiI18nData> = normalizeEmojiI18n(rawEmojiI18n);
+let emojiI18nByLocale: Record<string, EmojiI18nData> = normalizeEmojiI18n(rawEmojiI18n);
+
+const GLOBAL_I18N_KEY = "__REACTION_I18N__";
+const GLOBAL_EMOJI_I18N_KEY = "__REACTION_EMOJI_I18N__";
+const GLOBAL_REGISTER_I18N_KEY = "__REACTION_REGISTER_I18N__";
+const GLOBAL_REGISTER_EMOJI_I18N_KEY = "__REACTION_REGISTER_EMOJI_I18N__";
 
 /**
  * Access the global MediaWiki instance if available.
@@ -246,6 +251,71 @@ function normalizeEmojiI18n(input: unknown): Record<string, EmojiI18nData> {
 }
 
 /**
+ * Merge new emoji i18n data into the existing store.
+ * @param next - New emoji i18n data.
+ */
+function mergeEmojiI18n(next: Record<string, EmojiI18nData>): void {
+	for (const [locale, payload] of Object.entries(next)) {
+		emojiI18nByLocale[locale.toLowerCase()] = payload;
+	}
+}
+
+/**
+ * Merge new catalogue data into the existing store.
+ * @param next - New catalogue data.
+ */
+function mergeCatalogues(next: CatalogueMap): void {
+	for (const [locale, messages] of Object.entries(next)) {
+		catalogues[locale.toLowerCase()] = messages;
+	}
+	fallbackLocale = resolveFallbackLocale();
+	refreshLocale();
+}
+
+/**
+ * Register new i18n catalogue data.
+ * @param input - New catalogue data.
+ */
+export function registerI18nCatalogues(input: unknown): void {
+	const normalized = normalizeCatalogues(input);
+	if (Object.keys(normalized).length === 0) {
+		return;
+	}
+	mergeCatalogues(normalized);
+}
+
+/**
+ * Register new emoji i18n data.
+ * @param input - New emoji i18n data.
+ */
+export function registerEmojiI18nData(input: unknown): void {
+	const normalized = normalizeEmojiI18n(input);
+	if (Object.keys(normalized).length === 0) {
+		return;
+	}
+	mergeEmojiI18n(normalized);
+}
+
+/**
+ * Consume any pending global i18n data and set up global registration functions.
+ */
+function consumeGlobalI18n(): void {
+	const globalObj = globalThis as Record<string, unknown>;
+	const pendingI18n = globalObj[GLOBAL_I18N_KEY];
+	const pendingEmoji = globalObj[GLOBAL_EMOJI_I18N_KEY];
+	if (pendingI18n) {
+		registerI18nCatalogues(pendingI18n);
+		delete globalObj[GLOBAL_I18N_KEY];
+	}
+	if (pendingEmoji) {
+		registerEmojiI18nData(pendingEmoji);
+		delete globalObj[GLOBAL_EMOJI_I18N_KEY];
+	}
+	globalObj[GLOBAL_REGISTER_I18N_KEY] = registerI18nCatalogues;
+	globalObj[GLOBAL_REGISTER_EMOJI_I18N_KEY] = registerEmojiI18nData;
+}
+
+/**
  * Normalize emoji entries for a locale.
  * @param input - Raw emoji entries.
  * @returns Normalized emoji entries.
@@ -341,6 +411,8 @@ export function resolveEmojiI18nData(locale: LocaleCode): EmojiI18nData | null {
 	}
 	return null;
 }
+
+consumeGlobalI18n();
 
 /**
  * Parse wiki-style links into structured segments.

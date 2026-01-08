@@ -88,6 +88,11 @@ async function init() {
 			void addReactionButtons(roots && roots.length > 0 ? roots : undefined);
 		}, 200);
 	});
+
+	// Fallback for cases where the hook fires before this gadget loads.
+	setTimeout(() => {
+		void addReactionButtons(document);
+	}, 0);
 }
 
 void init();

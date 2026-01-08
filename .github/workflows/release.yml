@@ -28,11 +28,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build JavaScript bundle
-        run: npm run build
-
-      - name: Build localized wikitext modules
-        run: npm run build:wikitext
+      - name: Run build
+        run: npm run build:ci
 
       - name: Create GitHub release
         uses: ncipollo/release-action@v1
