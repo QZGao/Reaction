@@ -5,6 +5,8 @@ import { configDefaults, defineConfig } from 'vitest/config';
 
 const I18N_VIRTUAL_ID = 'virtual:i18n';
 const I18N_DIR = path.resolve(process.cwd(), 'i18n');
+const EMOJI_I18N_VIRTUAL_ID = 'virtual:emoji-i18n';
+const EMOJI_I18N_DIR = path.resolve(process.cwd(), 'emoji-i18n');
 
 function i18nCataloguesPlugin(): Plugin {
 	return {
@@ -42,8 +44,44 @@ function i18nCataloguesPlugin(): Plugin {
 	};
 }
 
+function emojiI18nPlugin(): Plugin {
+	return {
+		name: 'reaction-vitest-emoji-i18n',
+		resolveId(id) {
+			if (id === EMOJI_I18N_VIRTUAL_ID) {
+				return id;
+			}
+			return undefined;
+		},
+		async load(id) {
+			if (id !== EMOJI_I18N_VIRTUAL_ID) {
+				return null;
+			}
+			const entries = await fs.readdir(EMOJI_I18N_DIR, { withFileTypes: true });
+			const catalogues: Record<string, unknown> = {};
+			for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+				if (!entry.isFile() || !entry.name.endsWith('.json')) {
+					continue;
+				}
+				const locale = entry.name.replace(/\.json$/i, '');
+				const filePath = path.join(EMOJI_I18N_DIR, entry.name);
+				const contents = await fs.readFile(filePath, 'utf8');
+				try {
+					catalogues[locale] = JSON.parse(contents);
+				} catch (error) {
+					throw new Error(`[Reaction Vitest] Failed to parse ${entry.name}: ${(error as Error).message}`);
+				}
+			}
+			return {
+				code: `export default ${JSON.stringify(catalogues)};`,
+				map: null
+			};
+		}
+	};
+}
+
 export default defineConfig({
-	plugins: [i18nCataloguesPlugin()],
+	plugins: [i18nCataloguesPlugin(), emojiI18nPlugin()],
 	test: {
 		coverage: {
 			include: ['src/**/*.{ts,tsx}'],
