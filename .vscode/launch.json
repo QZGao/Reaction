@@ -12,7 +12,7 @@
 			"preLaunchTask": "watch-debug-extension",
 			"reloadOnChange": {
 				"watch": [
-					"${workspaceFolder}/.debug/bundled.js",
+					"${workspaceFolder}/.debug/Gadget-Reaction*.js",
 					"${workspaceFolder}/.debug/inject.js",
 					"${workspaceFolder}/.debug/manifest.json"
 				],

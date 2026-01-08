@@ -1,6 +1,7 @@
 // Inject bundled.js into the page context after page loads
 (function () {
-	const bundleUrl = browser.runtime.getURL('bundled.js');
+	const baseBundleUrl = browser.runtime.getURL('Gadget-Reaction.js');
+	const bundlePrefix = baseBundleUrl.replace(/Gadget-Reaction\.js$/, '');
 	const SCRIPT_ID = 'reaction-debug-userscript';
 	const DEV_STORAGE_KEY = 'reaction-dev';
 
@@ -17,7 +18,7 @@
 		const waitScript = document.createElement('script');
 		waitScript.textContent = `
 			(function() {
-				function loadReaction() {
+				function loadReactionWithUrl(url, onError) {
 					// Remove any previously injected copy (prevents double-injection)
 					var old = document.getElementById(${JSON.stringify(SCRIPT_ID)});
 					if (old) old.remove();
@@ -25,19 +26,66 @@
 					var script = document.createElement('script');
 					script.id = ${JSON.stringify(SCRIPT_ID)};
 
-					// Cache-bust so Firefox won’t reuse an old bundled.js
-					script.src = ${JSON.stringify(bundleUrl)} + '?t=' + Date.now();
+					// Cache-bust so Firefox won’t reuse an old bundle
+					script.src = url + '?t=' + Date.now();
+					if (typeof onError === 'function') {
+						script.onerror = onError;
+					}
 
 					document.head.appendChild(script);
 				}
 
+				function collectLocaleCandidates() {
+					var locales = [];
+					var addLocale = function(value) {
+						if (!value || typeof value !== 'string') return;
+						var normalized = value.toLowerCase();
+						if (normalized && locales.indexOf(normalized) === -1) {
+							locales.push(normalized);
+						}
+					};
+					try {
+						if (typeof mw !== 'undefined') {
+							var chain = mw.language && mw.language.getFallbackLanguageChain
+								? mw.language.getFallbackLanguageChain()
+								: null;
+							if (Array.isArray(chain)) {
+								chain.forEach(addLocale);
+							}
+							addLocale(mw.config && mw.config.get('wgUserLanguage'));
+							addLocale(mw.config && mw.config.get('wgContentLanguage'));
+						}
+					} catch (e) {}
+					addLocale(navigator && navigator.language);
+					return locales;
+				}
+
+				function tryLoadLocaleBundles() {
+					var locales = collectLocaleCandidates();
+					var index = 0;
+
+					function loadLocaleBundle() {
+						if (index >= locales.length) {
+							return;
+						}
+						var locale = locales[index++];
+						var localeUrl = ${JSON.stringify(bundlePrefix)} + 'Gadget-Reaction.' + locale + '.js';
+						loadReactionWithUrl(localeUrl, function() {
+							loadLocaleBundle();
+						});
+					}
+
+					loadReactionWithUrl(${JSON.stringify(baseBundleUrl)});
+					loadLocaleBundle();
+				}
+
 				if (typeof mw !== 'undefined' && mw.loader && typeof mw.loader.using === 'function') {
-					loadReaction();
+					tryLoadLocaleBundles();
 				} else {
 					// Fallback: wait for mw.loader
 					setTimeout(function retry() {
 						if (typeof mw !== 'undefined' && mw.loader && typeof mw.loader.using === 'function') {
-							loadReaction();
+							tryLoadLocaleBundles();
 						} else {
 							setTimeout(retry, 50);
 						}
