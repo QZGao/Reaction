@@ -69,7 +69,7 @@
 							return;
 						}
 						var locale = locales[index++];
-						var localeUrl = ${JSON.stringify(bundlePrefix)} + 'Gadget-Reaction.' + locale + '.js';
+						var localeUrl = ${JSON.stringify(bundlePrefix)} + 'Gadget-Reaction-' + locale + '.js';
 						loadReactionWithUrl(localeUrl, function() {
 							loadLocaleBundle();
 						});

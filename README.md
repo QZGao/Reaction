@@ -52,9 +52,9 @@ npm test              # Run Vitest tests
 
 You can test Reaction by pasting the bundle directly into a wiki tab:
 
-1. Run `npm run build:debug`. The output appears at `.debug/Gadget-Reaction.js` and `.debug/Gadget-Reaction.<locale>.js`.
+1. Run `npm run build:debug`. The output appears at `.debug/Gadget-Reaction.js` and `.debug/Gadget-Reaction-<locale>.js`.
 2. Open `.debug/Gadget-Reaction.js`, copy its entire contents, and switch to the wiki article you want to test.
-3. If your locale has a supplementary bundle, paste `.debug/Gadget-Reaction.<locale>.js` after the base bundle.
+3. If your locale has a supplementary bundle, paste `.debug/Gadget-Reaction-<locale>.js` after the base bundle.
 4. Open the browser DevTools console (`F12`/`Ctrl+Shift+I`) on that page and paste the bundle. It bootstraps itself the same way the gadget loader does, so Reaction immediately mounts in the current tab.
 5. When you rebuild, reload the wiki page and repeat the paste to pick up the changes. Keeping `npm run build:debug --watch` in another terminal helps rebuild automatically; you only need to re-paste after each build.
 

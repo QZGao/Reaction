@@ -160,11 +160,11 @@ async function buildLocaleBundles({ outputDir, locales, emojiLocales, minify }) 
 			emojiData = JSON.parse(await fs.promises.readFile(emojiPath, 'utf8'));
 		}
 		const contents = getLocaleBundleContents(locale, messages, emojiData);
-		const outfile = path.join(outputDir, `Gadget-Reaction.${locale}.js`);
+		const outfile = path.join(outputDir, `Gadget-Reaction-${locale}.js`);
 		await esbuild.build({
 			stdin: {
 				contents,
-				sourcefile: `Gadget-Reaction.${locale}.js`,
+				sourcefile: `Gadget-Reaction-${locale}.js`,
 				loader: 'js',
 			},
 			outfile,
