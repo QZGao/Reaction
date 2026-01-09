@@ -42,6 +42,26 @@ async function shouldSkipPage(): Promise<boolean> {
 	if (skipCache !== null) {
 		return skipCache;
 	}
+	const namespaceNumber = mw.config.get("wgNamespaceNumber") as number | null | undefined;
+	const skippedNamespaces = new Set([
+		-2, // Media
+		-1, // Special
+		0,  // Main
+		6,  // File
+		8,  // MediaWiki
+		10, // Template
+		12, // Help
+		14  // Category
+	]);
+	if (namespaceNumber != null && skippedNamespaces.has(namespaceNumber)) {
+		skipCache = true;
+		return skipCache;
+	}
+	const contentModel = mw.config.get("wgPageContentModel") as string | null | undefined;
+	if (contentModel && contentModel !== "wikitext") {
+		skipCache = true;
+		return skipCache;
+	}
 	const hasReactionModule = await isReactionModuleAvailable();
 	if (!hasReactionModule) {
 		skipCache = true;
