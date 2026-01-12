@@ -49,11 +49,7 @@ let apiInstance: mw.Api | null = null;
  */
 export function getApi(): mw.Api {
 	if (!apiInstance) {
-		apiInstance = new mw.Api({
-			ajax: {
-				headers: { "User-Agent": `Reaction/${state.version}` }
-			}
-		});
+		apiInstance = new mw.Api({ userAgent: `Reaction/${state.version}` });
 	}
 	return apiInstance;
 }
