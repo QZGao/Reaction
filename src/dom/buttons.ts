@@ -189,6 +189,25 @@ function findCommentStartMarker(node: HTMLElement): HTMLElement | null {
 
 		current = current.parentElement;
 	}
+	if (boundary) {
+		current = node;
+		while (current && boundary.contains(current)) {
+			let sibling: Node | null = current.nextSibling;
+			while (sibling) {
+				if (sibling instanceof HTMLElement) {
+					if (sibling.matches(COMMENT_MARKER_SELECTOR)) {
+						return sibling;
+					}
+					const descendantMarker = sibling.querySelector<HTMLElement>(COMMENT_MARKER_SELECTOR);
+					if (descendantMarker) {
+						return descendantMarker;
+					}
+				}
+				sibling = sibling.nextSibling;
+			}
+			current = current.parentElement;
+		}
+	}
 	return null;
 }
 
