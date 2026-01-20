@@ -18,6 +18,7 @@ const PICKER_MARGIN_PX = 8;
 const PICKER_CLASS = "reaction-emoji-picker";
 const STYLE_ELEMENT_ID = "reaction-emoji-picker-styles";
 const customEmojiTextMap = getCustomEmojiTextMap();
+const REACTION_VISIBILITY_NOTICE_KEY = "emojiPicker.notice.reaction_visibility";
 
 /**
  * Get the text representation for a custom emoji selection.
@@ -120,6 +121,14 @@ ${emojiMartStyles}
 	box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
 	border-radius: 8px;
 	background: #fff;
+}
+.${PICKER_CLASS}__notice {
+	position: absolute;
+	right: 10px;
+	top: 86px;
+	font-size: 0.72em;
+	color: #72777d;
+	pointer-events: none;
 }
 `;
 	root.appendChild(styleElement);
@@ -611,6 +620,10 @@ async function mountPicker(anchor: HTMLElement, input: HTMLInputElement): Promis
 	const appHandle = createPickerApp();
 	pickerApp = appHandle;
 	appHandle.mount(pickerContainer);
+	const notice = document.createElement("div");
+	notice.className = `${PICKER_CLASS}__notice`;
+	notice.textContent = t(REACTION_VISIBILITY_NOTICE_KEY);
+	pickerContainer.appendChild(notice);
 	await compatNextTick(() => undefined);
 	updatePickerPosition(anchor, pickerContainer);
 	attachViewportListeners();

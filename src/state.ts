@@ -1,6 +1,7 @@
 import pkg from "../package.json";
 
 const REACTION_STORAGE_KEY = "reaction.enabled";
+const REACTION_HIDE_STORAGE_KEY = "reaction.hidden";
 
 /**
  * Load the reaction modification enabled state from localStorage.
@@ -19,6 +20,22 @@ function loadReactionEnabled(): boolean {
 }
 
 /**
+ * Load the reaction hidden state from localStorage.
+ * Defaults to false if not set.
+ * @returns Whether reactions are hidden.
+ */
+function loadReactionHidden(): boolean {
+	if (typeof window === "undefined" || !("localStorage" in window)) {
+		return false;
+	}
+	const stored = window.localStorage.getItem(REACTION_HIDE_STORAGE_KEY);
+	if (stored == null) {
+		return false;
+	}
+	return stored === "true";
+}
+
+/**
  * Persist the reaction modification enabled state to localStorage.
  * @param enabled - Whether reaction modifications are enabled.
  */
@@ -27,6 +44,17 @@ function persistReactionEnabled(enabled: boolean): void {
 		return;
 	}
 	window.localStorage.setItem(REACTION_STORAGE_KEY, String(enabled));
+}
+
+/**
+ * Persist the reaction hidden state to localStorage.
+ * @param hidden - Whether reactions are hidden.
+ */
+function persistReactionHidden(hidden: boolean): void {
+	if (typeof window === "undefined" || !("localStorage" in window)) {
+		return;
+	}
+	window.localStorage.setItem(REACTION_HIDE_STORAGE_KEY, String(hidden));
 }
 
 /**
@@ -56,6 +84,11 @@ class State {
 	 * Whether reaction modifications are enabled for this session.
 	 */
 	reactionEnabled: boolean = loadReactionEnabled();
+
+	/**
+	 * Whether reactions are hidden for this session.
+	 */
+	reactionHidden: boolean = loadReactionHidden();
 }
 
 export const state = new State();
@@ -76,4 +109,13 @@ export function canReact(): boolean {
 export function setReactionEnabled(enabled: boolean): void {
 	state.reactionEnabled = enabled;
 	persistReactionEnabled(enabled);
+}
+
+/**
+ * Hide or show reaction elements.
+ * @param hidden - Whether reactions are hidden.
+ */
+export function setReactionHidden(hidden: boolean): void {
+	state.reactionHidden = hidden;
+	persistReactionHidden(hidden);
 }

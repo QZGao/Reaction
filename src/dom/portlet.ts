@@ -1,3 +1,12 @@
+import state, { setReactionHidden } from "../state";
+import { toggleReactionEnabled } from "./buttons";
+import { t } from "../i18n";
+
+const REACTION_PORTLET_ID = "reaction-toggle";
+const REACTION_HIDE_PORTLET_ID = "reaction-hide-toggle";
+const HIDE_CLASS = "reaction-hidden";
+let hideStylesInjected = false;
+
 /**
  * Add or update a portlet link in the actions menu (fallback to toolbox).
  * @param portletId - The HTML id attribute for the portlet link.
@@ -51,4 +60,120 @@ export function addPortletTrigger(portletId: string, label: string, onClick: () 
 	} else if (freshLi) {
 		freshLi.addEventListener('click', handler);
 	}
+}
+
+/**
+ * Ensure that the CSS styles for hiding reactions are injected.
+ */
+function ensureHideStyles(): void {
+	if (hideStylesInjected) {
+		return;
+	}
+	hideStylesInjected = true;
+	mw.util.addCSS(`
+html.${HIDE_CLASS} .template-reaction {
+	display: none !important;
+}
+`);
+}
+
+/**
+ * Set or unset the hidden state CSS class on the document root.
+ * @param hidden - Whether reactions should be hidden.
+ */
+export function setReactionHiddenState(hidden: boolean): void {
+	ensureHideStyles();
+	const root = document.documentElement;
+	if (!root) {
+		return;
+	}
+	root.classList.toggle(HIDE_CLASS, hidden);
+}
+
+/**
+ * Remove the legacy reaction portlet links if they exist.
+ */
+export function removeLegacyReactionPortlets(): void {
+	document.getElementById(REACTION_PORTLET_ID)?.remove();
+	document.getElementById(REACTION_HIDE_PORTLET_ID)?.remove();
+}
+
+/**
+ * Place the hide reactions portlet link immediately after the toggle portlet link.
+ */
+function placeHidePortletAfterToggle(): void {
+	const hideLi = document.getElementById(REACTION_HIDE_PORTLET_ID);
+	const toggleLi = document.getElementById(REACTION_PORTLET_ID);
+	if (!hideLi || !toggleLi) {
+		return;
+	}
+	const parent = toggleLi.parentNode;
+	if (!parent || parent !== hideLi.parentNode) {
+		return;
+	}
+	if (toggleLi.nextSibling === hideLi) {
+		return;
+	}
+	parent.insertBefore(hideLi, toggleLi.nextSibling);
+}
+
+/**
+ * Update the reaction toggle portlet link based on the current state.
+ */
+function updateReactionPortlet(): void {
+	const label = state.reactionEnabled
+		? t("dom.portlets.disable_reaction")
+		: t("dom.portlets.enable_reaction");
+	addPortletTrigger(REACTION_PORTLET_ID, label, () => {
+		const nextEnabled = !state.reactionEnabled;
+		if (nextEnabled) {
+			setReactionHidden(false);
+			setReactionHiddenState(false);
+		}
+		toggleReactionEnabled(nextEnabled);
+		updateLegacyReactionPortlets();
+	});
+}
+
+/**
+ * Update the hide reactions portlet link based on the current state.
+ */
+function updateHidePortlet(): void {
+	if (state.reactionEnabled) {
+		document.getElementById(REACTION_HIDE_PORTLET_ID)?.remove();
+		setReactionHidden(false);
+		setReactionHiddenState(false);
+		return;
+	}
+	const label = state.reactionHidden
+		? t("dom.portlets.unhide_reactions")
+		: t("dom.portlets.hide_reactions");
+	addPortletTrigger(REACTION_HIDE_PORTLET_ID, label, () => {
+		if (!state.reactionHidden) {
+			OO.ui.confirm(t("dom.confirm.hide_reactions"), {
+				title: t("default.titles.confirm"),
+				size: "small",
+			}).then((confirmed: boolean) => {
+				if (confirmed) {
+					setReactionHidden(true);
+					setReactionHiddenState(true);
+					updateLegacyReactionPortlets();
+				}
+			});
+			return;
+		}
+		setReactionHidden(false);
+		setReactionHiddenState(false);
+		updateLegacyReactionPortlets();
+	});
+	placeHidePortletAfterToggle();
+	setReactionHiddenState(state.reactionHidden);
+}
+
+/**
+ * Update legacy portlet links for reaction controls.
+ */
+export function updateLegacyReactionPortlets(): void {
+	updateReactionPortlet();
+	updateHidePortlet();
 }
