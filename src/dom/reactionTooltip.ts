@@ -1,12 +1,11 @@
 import { t } from "../i18n";
 import { convertTimestampToUserTimezone } from "../utils";
 import { getReactionCommentors, type ReactionCommentorEntry } from "./commentors";
-import state from "../state";
+import state, { canReact } from "../state";
 
 const TOOLTIP_CLASS = "reaction-tooltip";
 const isMobileSkin = (mw.config.get("skin") as string | undefined) === "minerva";
 const tooltipButtons = new WeakSet<HTMLElement>();
-const canReact = Boolean(state.userName) && !state.isTempUser;
 
 let tooltipContainer: HTMLDivElement | null = null;
 let tooltipContent: HTMLDivElement | null = null;
@@ -303,8 +302,12 @@ function showTooltip(button: HTMLElement): boolean {
  */
 function renderEntries(entries: ReactionCommentorEntry[], container: HTMLElement): void {
 	container.textContent = "";
-	if (!canReact) {
-		appendLoginHint(container);
+	if (!canReact()) {
+		if (state.userName && !state.isTempUser) {
+			appendHint(container, "dom.tooltips.enable_reactions_in_tools");
+		} else {
+			appendHint(container, "dom.tooltips.login_to_react");
+		}
 	}
 	if (entries.length === 0) {
 		const empty = document.createElement("div");
@@ -338,13 +341,14 @@ function renderEntries(entries: ReactionCommentorEntry[], container: HTMLElement
 }
 
 /**
- * Append a login hint to the tooltip content.
+ * Append a hint to the tooltip content.
  * @param container - Tooltip content container element.
+ * @param messageKey - Localization key for the hint text.
  */
-function appendLoginHint(container: HTMLElement): void {
+function appendHint(container: HTMLElement, messageKey: string): void {
 	const hint = document.createElement("div");
 	hint.className = `${TOOLTIP_CLASS}__hint`;
-	hint.textContent = t("dom.tooltips.login_to_react");
+	hint.textContent = t(messageKey);
 	container.appendChild(hint);
 }
 

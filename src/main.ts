@@ -1,5 +1,8 @@
-import { addReactionButtons } from "./dom/buttons";
+import { addReactionButtons, toggleReactionEnabled } from "./dom/buttons";
 import { fetchPageProperties, doesPageExist } from "./api/client";
+import { addPortletTrigger } from "./dom/portlet";
+import state from "./state";
+import { t } from "./i18n";
 
 interface MagicWordDescriptor {
 	property: string;
@@ -13,6 +16,7 @@ const MAGIC_WORD_SKIP: MagicWordDescriptor[] = [
 
 let skipCache: boolean | null = null;
 let modulePresenceCache: boolean | null = null;
+const REACTION_PORTLET_ID = "reaction-toggle";
 
 /**
  * Check if Module:Reaction exists on the wiki.
@@ -89,12 +93,27 @@ async function shouldSkipPage(): Promise<boolean> {
 }
 
 /**
+ * Update the reaction toggle portlet link based on the current state.
+ */
+function updateReactionPortlet(): void {
+	const label = state.reactionEnabled
+		? t("dom.portlets.disable_reaction")
+		: t("dom.portlets.enable_reaction");
+	addPortletTrigger(REACTION_PORTLET_ID, label, () => {
+		const nextEnabled = !state.reactionEnabled;
+		toggleReactionEnabled(nextEnabled);
+		updateReactionPortlet();
+	});
+}
+
+/**
  * Initialization entry point: load required modules and bind events.
  */
 async function init() {
 	if (await shouldSkipPage()) {
 		return;
 	}
+	updateReactionPortlet();
 	mw.loader.load("/w/index.php?title=Template:Reaction/styles.css&action=raw&ctype=text/css", "text/css");
 	try {
 		await mw.loader.using("ext.discussionTools.init");

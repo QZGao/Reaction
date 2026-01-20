@@ -61,6 +61,9 @@ describe("addReactionButtons", () => {
 	let addReactionButtons: typeof import("../../src/dom/buttons").addReactionButtons;
 
 	beforeAll(async () => {
+		if (typeof localStorage !== "undefined") {
+			localStorage.setItem("reaction.enabled", "true");
+		}
 		({ addReactionButtons } = await import("../../src/dom/buttons"));
 	});
 
