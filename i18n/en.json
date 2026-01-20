@@ -31,7 +31,7 @@
 	"dom.reactions.label": "Reaction",
 	"dom.reactions.list_separator": ", ",
 	"dom.tooltips.no_reactions": "No one has reacted to this comment yet.",
-	"dom.tooltips.enable_reactions_in_appearance": "Enable Reactions in Appearance to react.",
+	"dom.tooltips.enable_reactions_in_appearance": "Enable Reactions in [[Appearance]] to react.",
 	"dom.tooltips.enable_reactions_in_tools": "Enable Reactions in Tools to react.",
 	"dom.tooltips.login_to_react": "Log in to react.",
 	"dom.tooltips.reacted_to_comment": "$1 reacted to this comment.",

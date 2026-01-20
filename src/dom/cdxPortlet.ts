@@ -29,7 +29,68 @@ export function isVector2022Appearance(): boolean {
 	if (skin !== "vector-2022") {
 		return false;
 	}
-	return Boolean(document.getElementById("vector-appearance"));
+	return Boolean(document.getElementById("vector-appearance") || document.getElementById("vector-appearance-dropdown-checkbox"));
+}
+
+/**
+ * Check if an element is visible in the DOM.
+ * @param element - The HTMLElement to check.
+ * @returns True if the element is visible; otherwise, false.
+ */
+function isElementVisible(element: HTMLElement): boolean {
+	const style = window.getComputedStyle(element);
+	if (style.display === "none" || style.visibility === "hidden") {
+		return false;
+	}
+	if (element.getAttribute("aria-hidden") === "true") {
+		return false;
+	}
+	const rect = element.getBoundingClientRect();
+	if (rect.width <= 0 || rect.height <= 0) {
+		return false;
+	}
+	return true;
+}
+
+/**
+ * Open the Vector 2022 appearance panel if it is not already visible.
+ * @returns True if the panel was opened or already visible; otherwise, false.
+ */
+export function openVectorAppearancePanel(): boolean {
+	const appearance = document.getElementById("vector-appearance");
+	if (appearance && isElementVisible(appearance)) {
+		appearance.scrollIntoView({ behavior: "smooth", block: "center" });
+		return true;
+	}
+
+	const checkbox = document.getElementById("vector-appearance-dropdown-checkbox");
+	if (checkbox instanceof HTMLInputElement) {
+		const expanded = checkbox.getAttribute("aria-expanded");
+		if (expanded !== "true" || !checkbox.checked) {
+			const label = document.getElementById("vector-appearance-dropdown-label");
+			if (label instanceof HTMLElement) {
+				label.click();
+			}
+		}
+	}
+
+	let attempts = 0;
+	const maxAttempts = 10;
+	const poll = () => {
+		const opened = document.getElementById("vector-appearance");
+		if (opened && isElementVisible(opened)) {
+			opened.scrollIntoView({ behavior: "smooth", block: "center" });
+			return;
+		}
+		attempts += 1;
+		if (attempts < maxAttempts) {
+			requestAnimationFrame(poll);
+		} else {
+			console.log("[Reaction] Appearance panel did not open in time.");
+		}
+	};
+	requestAnimationFrame(poll);
+	return true;
 }
 
 /**

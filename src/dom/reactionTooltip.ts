@@ -2,7 +2,7 @@ import { t } from "../i18n";
 import { convertTimestampToUserTimezone } from "../utils";
 import { getReactionCommentors, type ReactionCommentorEntry } from "./commentors";
 import state, { canReact } from "../state";
-import { isVector2022Appearance } from "./cdxPortlet";
+import { isVector2022Appearance, openVectorAppearancePanel } from "./cdxPortlet";
 
 const TOOLTIP_CLASS = "reaction-tooltip";
 const isMobileSkin = (mw.config.get("skin") as string | undefined) === "minerva";
@@ -355,7 +355,34 @@ function renderEntries(entries: ReactionCommentorEntry[], container: HTMLElement
 function appendHint(container: HTMLElement, messageKey: string): void {
 	const hint = document.createElement("div");
 	hint.className = `${TOOLTIP_CLASS}__hint`;
-	hint.textContent = t(messageKey);
+	const message = t(messageKey);
+	const match = message.match(/\[\[([^[\]]+)\]\]/);
+	if (!match || match.index == null) {
+		hint.textContent = message;
+		container.appendChild(hint);
+		return;
+	}
+
+	const before = message.slice(0, match.index);
+	const linkText = match[1] ?? "";
+	const after = message.slice(match.index + match[0].length);
+
+	if (before) {
+		hint.appendChild(document.createTextNode(before));
+	}
+
+	const link = document.createElement("a");
+	link.href = "#";
+	link.textContent = linkText;
+	link.addEventListener("click", (event) => {
+		event.preventDefault();
+		openVectorAppearancePanel();
+	});
+	hint.appendChild(link);
+
+	if (after) {
+		hint.appendChild(document.createTextNode(after));
+	}
 	container.appendChild(hint);
 }
 

@@ -31,7 +31,7 @@
 	"dom.reactions.label": "反应",
 	"dom.reactions.list_separator": "、",
 	"dom.tooltips.no_reactions": "没有人回应这条留言",
-	"dom.tooltips.enable_reactions_in_appearance": "在外观中启用「反应」后可回应。",
+	"dom.tooltips.enable_reactions_in_appearance": "在[[外观]]中启用「反应」后可回应。",
 	"dom.tooltips.enable_reactions_in_tools": "在工具栏启用「反应」后可回应。",
 	"dom.tooltips.login_to_react": "登录后可回应。",
 	"dom.tooltips.reacted_to_comment": "$1回应了这条留言",
