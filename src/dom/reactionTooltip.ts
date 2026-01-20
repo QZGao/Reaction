@@ -1,12 +1,11 @@
 import { t } from "../i18n";
 import { convertTimestampToUserTimezone } from "../utils";
 import { getReactionCommentors, type ReactionCommentorEntry } from "./commentors";
-import state from "../state";
+import { canReact } from "../state";
 
 const TOOLTIP_CLASS = "reaction-tooltip";
 const isMobileSkin = (mw.config.get("skin") as string | undefined) === "minerva";
 const tooltipButtons = new WeakSet<HTMLElement>();
-const canReact = Boolean(state.userName) && !state.isTempUser;
 
 let tooltipContainer: HTMLDivElement | null = null;
 let tooltipContent: HTMLDivElement | null = null;
@@ -303,7 +302,7 @@ function showTooltip(button: HTMLElement): boolean {
  */
 function renderEntries(entries: ReactionCommentorEntry[], container: HTMLElement): void {
 	container.textContent = "";
-	if (!canReact) {
+	if (!canReact()) {
 		appendLoginHint(container);
 	}
 	if (entries.length === 0) {

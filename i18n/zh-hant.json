@@ -18,6 +18,8 @@
 	"dom.errors.missing_timestamp": "失敗！無法獲取時間戳。",
 	"dom.errors.unowned_reaction": "失敗！不能取消並未做出的反應。",
 	"dom.notify.invalid_icon": "反應圖示無效，小工具無法處理。",
+	"dom.portlets.disable_reaction": "停用反應",
+	"dom.portlets.enable_reaction": "啟用反應",
 	"dom.reactions.comment_stamp": "$1於$2",
 	"dom.reactions.label": "反應",
 	"dom.reactions.list_separator": "、",

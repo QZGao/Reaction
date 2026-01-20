@@ -1,4 +1,4 @@
-import state from "../state";
+import state, { canReact, setReactionEnabled } from "../state";
 import { getCurrentSignatureTimestamp, parseTimestamp, normalizeTitle } from "../utils";
 import { modifyPage, type ModifyPageRequest } from "../api/modifyPage";
 import { t, tReaction } from "../i18n";
@@ -27,7 +27,6 @@ import { showEmojiPicker, hideEmojiPicker } from "./emojiPicker";
  * @private
  */
 const _handlerRegistry = new WeakMap<HTMLElement, EventListener>();
-const canReact = Boolean(state.userName) && !state.isTempUser;
 
 /**
  * Tracks the timestamp node associated with each button via WeakMap.
@@ -472,7 +471,7 @@ function getCommentContext(button: HTMLElement): CommentContext | null {
  * @param button {HTMLElement} - Reaction button element.
  */
 function handleReactionClick(button: HTMLElement) {
-	if (!canReact) {
+	if (!canReact()) {
 		return;
 	}
 	if (button.classList.contains("reaction-new")) {
@@ -840,7 +839,7 @@ function bindEvent2ReactionButton(button: HTMLElement) {
 		return;
 	}
 	attachReactionTooltip(button);
-	if (canReact) {
+	if (canReact()) {
 		let buttonClickHandler: EventListener = () => handleReactionClick(button);
 		_handlerRegistry.set(button, buttonClickHandler);
 		button.addEventListener("click", buttonClickHandler);
@@ -986,7 +985,7 @@ function insertNewReactionBefore(target: HTMLElement, timestamp?: HTMLElement | 
 	if (!target.parentNode) {
 		return false;
 	}
-	if (!canReact) {
+	if (!canReact()) {
 		return false;
 	}
 	if (isInExcludedArea(target)) {
@@ -1100,4 +1099,31 @@ export async function addReactionButtons(containers?: ReactionRoot | ReactionRoo
 		}
 	}
 	console.log(`[Reaction] Added ${totalInserted} new reaction buttons.`);
+}
+
+/**
+ * Disable all reaction modifications on the page.
+ */
+function disableReaction(): void {
+	hideEmojiPicker();
+	const buttons = Array.from(document.querySelectorAll<HTMLElement>(".template-reaction"));
+	for (const button of buttons) {
+		removeRegisteredHandler(button);
+		if (button.classList.contains("reaction-new")) {
+			button.remove();
+		}
+	}
+}
+
+/**
+ * Enable or disable reaction modifications based on the provided flag.
+ * @param enabled - Whether to enable reaction modifications.
+ */
+export function toggleReactionEnabled(enabled: boolean): void {
+	setReactionEnabled(enabled);
+	if (enabled) {
+		void addReactionButtons(document);
+	} else {
+		disableReaction();
+	}
 }
