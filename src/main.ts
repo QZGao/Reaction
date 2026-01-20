@@ -1,8 +1,7 @@
-import { addReactionButtons, toggleReactionEnabled } from "./dom/buttons";
+import { addReactionButtons } from "./dom/buttons";
 import { fetchPageProperties, doesPageExist } from "./api/client";
-import { addPortletTrigger } from "./dom/portlet";
-import state, { setReactionHidden } from "./state";
-import { t } from "./i18n";
+import { isVector2022Appearance, updateAppearancePortlet } from "./dom/cdxPortlet";
+import { updateLegacyReactionPortlets } from "./dom/portlet";
 
 interface MagicWordDescriptor {
 	property: string;
@@ -16,10 +15,6 @@ const MAGIC_WORD_SKIP: MagicWordDescriptor[] = [
 
 let skipCache: boolean | null = null;
 let modulePresenceCache: boolean | null = null;
-const REACTION_PORTLET_ID = "reaction-toggle";
-const REACTION_HIDE_PORTLET_ID = "reaction-hide-toggle";
-const HIDE_CLASS = "reaction-hidden";
-let hideStylesInjected = false;
 
 /**
  * Check if Module:Reaction exists on the wiki.
@@ -96,123 +91,17 @@ async function shouldSkipPage(): Promise<boolean> {
 }
 
 /**
- * Update the reaction toggle portlet link based on the current state.
- */
-function updateReactionPortlet(): void {
-	const label = state.reactionEnabled
-		? t("dom.portlets.disable_reaction")
-		: t("dom.portlets.enable_reaction");
-	addPortletTrigger(REACTION_PORTLET_ID, label, () => {
-		const nextEnabled = !state.reactionEnabled;
-		if (nextEnabled) {
-			setReactionHidden(false);
-			setHiddenState(false);
-		}
-		toggleReactionEnabled(nextEnabled);
-		updateReactionPortlet();
-		updateHidePortlet();
-	});
-}
-
-/**
- * Ensure that the CSS styles for hiding reactions are injected.
- */
-function ensureHideStyles(): void {
-	if (hideStylesInjected) {
-		return;
-	}
-	hideStylesInjected = true;
-	mw.util.addCSS(`
-html.${HIDE_CLASS} .template-reaction {
-	display: none !important;
-}
-`);
-}
-
-/**
- * Set or unset the hidden state CSS class on the document root.
- * @param hidden - Whether reactions should be hidden.
- */
-function setHiddenState(hidden: boolean): void {
-	ensureHideStyles();
-	const root = document.documentElement;
-	if (!root) {
-		return;
-	}
-	root.classList.toggle(HIDE_CLASS, hidden);
-}
-
-/**
- * Remove the hide reactions portlet link if it exists.
- */
-function removeHidePortlet(): void {
-	const existing = document.getElementById(REACTION_HIDE_PORTLET_ID);
-	existing?.remove();
-}
-
-/**
- * Place the hide reactions portlet link immediately after the toggle portlet link.
- */
-function placeHidePortletAfterToggle(): void {
-	const hideLi = document.getElementById(REACTION_HIDE_PORTLET_ID);
-	const toggleLi = document.getElementById(REACTION_PORTLET_ID);
-	if (!hideLi || !toggleLi) {
-		return;
-	}
-	const parent = toggleLi.parentNode;
-	if (!parent || parent !== hideLi.parentNode) {
-		return;
-	}
-	if (toggleLi.nextSibling === hideLi) {
-		return;
-	}
-	parent.insertBefore(hideLi, toggleLi.nextSibling);
-}
-
-/**
- * Update the hide reactions portlet link based on the current state.
- */
-function updateHidePortlet(): void {
-	if (state.reactionEnabled) {
-		removeHidePortlet();
-		setReactionHidden(false);
-		setHiddenState(false);
-		return;
-	}
-	const label = state.reactionHidden
-		? t("dom.portlets.unhide_reactions")
-		: t("dom.portlets.hide_reactions");
-	addPortletTrigger(REACTION_HIDE_PORTLET_ID, label, () => {
-		if (!state.reactionHidden) {
-			OO.ui.confirm(t("dom.confirm.hide_reactions"), {
-				title: t("default.titles.confirm"),
-				size: "small",
-			}).then((confirmed: boolean) => {
-				if (confirmed) {
-					setReactionHidden(true);
-					setHiddenState(true);
-					updateHidePortlet();
-				}
-			});
-			return;
-		}
-		setReactionHidden(false);
-		setHiddenState(false);
-		updateHidePortlet();
-	});
-	placeHidePortletAfterToggle();
-	setHiddenState(state.reactionHidden);
-}
-
-/**
  * Initialization entry point: load required modules and bind events.
  */
 async function init() {
 	if (await shouldSkipPage()) {
 		return;
 	}
-	updateReactionPortlet();
-	updateHidePortlet();
+	if (isVector2022Appearance()) {
+		updateAppearancePortlet();
+	} else {
+		updateLegacyReactionPortlets();
+	}
 	mw.loader.load("/w/index.php?title=Template:Reaction/styles.css&action=raw&ctype=text/css", "text/css");
 	try {
 		await mw.loader.using("ext.discussionTools.init");

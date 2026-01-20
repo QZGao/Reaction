@@ -2,6 +2,7 @@ import { t } from "../i18n";
 import { convertTimestampToUserTimezone } from "../utils";
 import { getReactionCommentors, type ReactionCommentorEntry } from "./commentors";
 import state, { canReact } from "../state";
+import { isVector2022Appearance } from "./cdxPortlet";
 
 const TOOLTIP_CLASS = "reaction-tooltip";
 const isMobileSkin = (mw.config.get("skin") as string | undefined) === "minerva";
@@ -304,7 +305,13 @@ function renderEntries(entries: ReactionCommentorEntry[], container: HTMLElement
 	container.textContent = "";
 	if (!canReact()) {
 		if (state.userName && !state.isTempUser) {
-			appendHint(container, "dom.tooltips.enable_reactions_in_tools");
+			const useAppearance = isVector2022Appearance();
+			appendHint(
+				container,
+				useAppearance
+					? "dom.tooltips.enable_reactions_in_appearance"
+					: "dom.tooltips.enable_reactions_in_tools",
+			);
 		} else {
 			appendHint(container, "dom.tooltips.login_to_react");
 		}
