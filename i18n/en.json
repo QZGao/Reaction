@@ -24,6 +24,7 @@
 	"dom.reactions.label": "Reaction",
 	"dom.reactions.list_separator": ", ",
 	"dom.tooltips.no_reactions": "No one has reacted to this comment yet.",
+	"dom.tooltips.enable_reactions_in_tools": "Enable reactions in Tools to react.",
 	"dom.tooltips.login_to_react": "Log in to react.",
 	"dom.tooltips.reacted_to_comment": "$1 reacted to this comment.",
 	"module.reaction.icon_invalid_message": "Unsupported icon input",

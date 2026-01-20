@@ -24,6 +24,7 @@
 	"dom.reactions.label": "反应",
 	"dom.reactions.list_separator": "、",
 	"dom.tooltips.no_reactions": "没有人回应这条留言",
+	"dom.tooltips.enable_reactions_in_tools": "在工具栏启用后可回应。",
 	"dom.tooltips.login_to_react": "登录后可回应。",
 	"dom.tooltips.reacted_to_comment": "$1回应了这条留言",
 	"module.reaction.icon_invalid_message": "不支持输入的图标",

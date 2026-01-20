@@ -4,16 +4,16 @@ const REACTION_STORAGE_KEY = "reaction.enabled";
 
 /**
  * Load the reaction modification enabled state from localStorage.
- * Defaults to true if not set.
+ * Defaults to false if not set.
  * @returns Whether reaction modifications are enabled.
  */
 function loadReactionEnabled(): boolean {
 	if (typeof window === "undefined" || !("localStorage" in window)) {
-		return true;
+		return false;
 	}
 	const stored = window.localStorage.getItem(REACTION_STORAGE_KEY);
 	if (stored == null) {
-		return true;
+		return false;
 	}
 	return stored === "true";
 }
