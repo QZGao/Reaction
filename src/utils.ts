@@ -512,18 +512,21 @@ function parseOffsetMinutes(expression: string): number | null {
 	if (!trimmed) {
 		return null;
 	}
-	const match = trimmed.match(/^([+-]?)(\d{1,2})(?::?(\d{2}))?$/);
-	if (match) {
+	if (trimmed.includes(":")) {
+		const match = trimmed.match(/^([+-]?)(\d{1,2}):(\d{2})$/);
+		if (!match) {
+			return null;
+		}
 		const sign = match[1] === "-" ? -1 : 1;
 		const hours = Number(match[2]);
-		const minutes = match[3] ? Number(match[3]) : 0;
+		const minutes = Number(match[3]);
+		if (minutes >= 60) {
+			return null;
+		}
 		return sign * (hours * 60 + minutes);
 	}
 	const numeric = Number(trimmed);
 	if (!Number.isNaN(numeric)) {
-		if (Math.abs(numeric) <= 24) {
-			return numeric * 60;
-		}
 		return numeric;
 	}
 	return null;
