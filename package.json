@@ -1,6 +1,6 @@
 {
 	"name": "reaction",
-	"version": "2.2.4",
+	"version": "2.2.5",
 	"private": true,
 	"description": "Add reaction emojis to your favorite comments on Wikimedia project talk pages.",
 	"type": "module",
