@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { normalizeTitle } from "../utils";
 
 const SIGNATURE_SCAN_LIMIT = 255; // matches the on-wiki signature length guideline (255 bytes)
@@ -246,28 +247,28 @@ export function findCommentPosition(
 		return { position: match.index };
 	}
 	if (totalMatches === 0) {
-		return { position: null, reason: "timestamp not found in wikitext" };
+		return { position: null, reason: t("wikitext.comments.errors.timestamp_not_found") };
 	}
 	if (matchesWithUsers === 0) {
 		return {
 			position: null,
-			reason: `timestamp found ${totalMatches} time(s) but no recognizable user links within ${SIGNATURE_SCAN_LIMIT} characters before it`,
+			reason: t("wikitext.comments.errors.timestamp_without_users", [totalMatches, SIGNATURE_SCAN_LIMIT]),
 		};
 	}
 	if (normalizedAuthor && matchesWithMatchingAuthor === 0) {
 		return {
 			position: null,
-			reason: `timestamp found but none of the signatures matched author "${normalizedAuthor}"`,
+			reason: t("wikitext.comments.errors.timestamp_author_mismatch", [normalizedAuthor]),
 		};
 	}
 	if (occurrence != null) {
 		return {
 			position: null,
-			reason: `timestamp occurrence ${occurrence} not found (matched ${matchIndex} occurrence(s))`,
+			reason: t("wikitext.comments.errors.timestamp_occurrence_not_found", [occurrence, matchIndex]),
 		};
 	}
 	return {
 		position: null,
-		reason: "timestamp matched signatures but no exact position could be determined",
+		reason: t("wikitext.comments.errors.timestamp_position_unknown"),
 	};
 }
