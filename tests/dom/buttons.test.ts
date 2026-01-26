@@ -175,29 +175,262 @@ describe("addReactionButtons", () => {
 		const commentId = "c-魔琴-20260104035100-SunAfterRain-20260104021200";
 
 		document.body.innerHTML = `
-			<dl class="cd-commentLevel cd-commentLevel-3">
-				<dd class="cd-comment-part cd-comment-part-first" data-cd-comment-index="4">
+			<dl class="cd-commentLevel cd-commentLevel-1">
+				<dd class="cd-comment-part cd-comment-part-first cd-comment-part-last" data-cd-comment-index="18">
 					<div class="cd-comment-header-wrapper">
 						<div class="cd-comment-header">
-							<div class="cd-comment-author-wrapper">
-								<a href="/wiki/User:%E9%AD%94%E7%90%B4" title="User:魔琴" class="userlink cd-comment-author"><bdi>魔琴</bdi></a>
-							</div>
-							<a tabindex="0" role="button" class="cd-comment-button-label cd-comment-timestamp mw-selflink-fragment cd-comment-button" href="#${commentId}" title="2026年1月4日 (日) 03:51 (UTC)">2026年1月4日 (日) 03:51 (UTC)</a>
+							<div class="cd-comment-author-wrapper"><a href="/wiki/User:TimYuan28" title="User:TimYuan28"
+									class="userlink cd-comment-author"><bdi>TimYuan28</bdi></a> <span
+									class="cd-comment-author-links">（<a href="/wiki/User_talk:TimYuan28" title="User talk:TimYuan28"
+										class="userlink">討論</a>）</span></div><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-timestamp mw-selflink-fragment cd-comment-button"
+								href="#c-TimYuan28-20260124143800-Ahfosh-20260124142700" title="2026年1月24日 (六) 14:38 (UTC)">2026年1月24日 (六) 14:38 (UTC)</a><a tabindex="0" role="button"
+								class="cd-comment-button-icon cd-comment-button-goToParent cd-icon cd-comment-button"
+								title="前往上層級意見"><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"
+									class="mw-invert">
+									<path d="M10 5l8 10H2z"></path>
+								</svg></a>
+						</div>
+					</div>Sample text.<span
+						data-mw-comment-sig="c-TimYuan28-20260124143800-Ahfosh-20260124142700"></span>
+					<div class="cd-comment-menu-wrapper">
+						<div class="cd-comment-menu"><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-button">回覆</a><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-button">編輯</a><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-button" title="對新增此意見的編輯表示感謝">感謝</a></div>
+					</div>
+				</dd>
+				<dd class="cd-comment-part cd-comment-part-first" data-cd-comment-index="19">
+					<div class="cd-comment-header-wrapper">
+						<div class="cd-comment-header">
+							<div class="cd-comment-author-wrapper"><a href="/wiki/User:Thehistorianisaac" title=""
+									class="userlink cd-comment-author"><bdi>Thehistorianisaac</bdi></a> <span
+									class="cd-comment-author-links">（<a href="/wiki/User_talk:Thehistorianisaac"
+										title="User talk:Thehistorianisaac" class="userlink">討論</a>）</span></div><a tabindex="0"
+								role="button"
+								class="cd-comment-button-label cd-comment-timestamp mw-selflink-fragment cd-comment-button"
+								href="#c-Thehistorianisaac-20260124150400-Ahfosh-20260124142700" title="2026年1月24日 (六) 15:04 (UTC)">2026年1月24日 (六) 15:04 (UTC)</a><a tabindex="0" role="button"
+								class="cd-comment-button-icon cd-comment-button-goToParent cd-icon cd-comment-button"
+								title="前往上層級意見"><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"
+									class="mw-invert">
+									<path d="M10 5l8 10H2z"></path>
+								</svg></a>
+						</div>
+					</div>Sample text.
+				</dd>
+				<dd class="cd-comment-part" data-cd-comment-index="19">Sample text.</dd>
+				<dd class="cd-comment-part cd-comment-part-last" data-cd-comment-index="19">
+					Sample text.<span
+						data-mw-comment-sig="c-Thehistorianisaac-20260124150400-Ahfosh-20260124142700"></span>
+					<div class="cd-comment-menu-wrapper">
+						<div class="cd-comment-menu"><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-button">回覆</a><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-button">編輯</a><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-button" title="對新增此意見的編輯表示感謝">感謝</a></div>
+					</div>
+				</dd>
+				<dd class="cd-comment-part cd-comment-part-first cd-comment-part-last" data-cd-comment-index="20">
+					<div class="cd-comment-header-wrapper">
+						<div class="cd-comment-header">
+							<div class="cd-comment-author-wrapper"><a
+									href="/wiki/User:%E7%8E%B0%E5%9C%A8%E7%9C%8B%E8%A7%81%E4%BD%A0" title="User:現在看見你"
+									class="userlink cd-comment-author"><bdi>现在看见你</bdi></a> <span
+									class="cd-comment-author-links">（<a
+										href="/wiki/User_talk:%E7%8E%B0%E5%9C%A8%E7%9C%8B%E8%A7%81%E4%BD%A0" title="User talk:現在看見你"
+										class="userlink">討論</a>）</span></div><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-timestamp mw-selflink-fragment cd-comment-button"
+								href="#c-现在看见你-20260124151300-Ahfosh-20260124142700" title="2026年1月24日 (六) 15:13 (UTC)">2026年1月24日 (六) 15:13 (UTC)</a><a tabindex="0"
+								role="button" class="cd-comment-button-icon cd-comment-button-goToParent cd-icon cd-comment-button"
+								title="前往上層級意見"><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"
+									class="mw-invert">
+									<path d="M10 5l8 10H2z"></path>
+								</svg></a>
+						</div>
+					</div>Sample text.<span
+						data-mw-comment-sig="c-现在看见你-20260124151300-Ahfosh-20260124142700"></span>
+					<div class="cd-comment-menu-wrapper">
+						<div class="cd-comment-menu"><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-button">回覆</a><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-button">編輯</a><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-button" title="對新增此意見的編輯表示感謝">感謝</a></div>
+					</div>
+				</dd>
+				<dd class="cd-comment-part cd-comment-part-first cd-comment-part-last" data-cd-comment-index="21">
+					<div class="cd-comment-header-wrapper">
+						<div class="cd-comment-header">
+							<div class="cd-comment-author-wrapper"><a href="/wiki/User:YFdyh000" title="User:YFdyh000"
+									class="userlink cd-comment-author"><bdi>YFdyh000</bdi></a> <span
+									class="cd-comment-author-links">（<a href="/wiki/User_talk:YFdyh000" title="User talk:YFdyh000"
+										class="userlink">討論</a>）</span></div><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-timestamp mw-selflink-fragment cd-comment-button"
+								href="#c-YFdyh000-20260124153000-Ahfosh-20260124142700" title="2026年1月24日 (六) 15:30 (UTC)">2026年1月24日 (六) 15:30 (UTC)</a><a tabindex="0" role="button"
+								class="cd-comment-button-icon cd-comment-button-goToParent cd-icon cd-comment-button"
+								title="前往上層級意見"><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"
+									class="mw-invert">
+									<path d="M10 5l8 10H2z"></path>
+								</svg></a>
+						</div>
+					</div>Sample text.<span
+						data-mw-comment-sig="c-YFdyh000-20260124153000-Ahfosh-20260124142700"></span>
+					<div class="cd-comment-menu-wrapper">
+						<div class="cd-comment-menu"><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-button">回覆</a><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-button">編輯</a><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-button" title="對新增此意見的編輯表示感謝">感謝</a></div>
+					</div>
+				</dd>
+				<dd class="cd-comment-part cd-comment-part-first cd-comment-part-last" data-cd-comment-index="22">
+					<div class="cd-comment-header-wrapper">
+						<div class="cd-comment-header">
+							<div class="cd-comment-author-wrapper"><a href="/wiki/User:%E9%9D%99%E9%AD%94%E9%AD%94%E5%A5%B3"
+									title="User:靜魔魔女" class="userlink cd-comment-author"><bdi>静魔魔女</bdi></a> <span
+									class="cd-comment-author-links">（<a title="User talk:静魔魔女"
+										href="/wiki/User_talk:%E9%9D%99%E9%AD%94%E9%AD%94%E5%A5%B3" class="userlink">討論</a>）</span>
+							</div><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-timestamp mw-selflink-fragment cd-comment-button"
+								href="#c-静魔魔女-20260124163300-Ahfosh-20260124142700" title="2026年1月24日 (六) 16:33 (UTC)">2026年1月24日 (六) 16:33 (UTC)</a><a tabindex="0" role="button"
+								class="cd-comment-button-icon cd-comment-button-goToParent cd-icon cd-comment-button"
+								title="前往上層級意見"><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"
+									class="mw-invert">
+									<path d="M10 5l8 10H2z"></path>
+								</svg></a>
+						</div>
+					</div>Sample text.<span
+						data-mw-comment-sig="c-静魔魔女-20260124163300-Ahfosh-20260124142700"></span>
+					<style data-mw-deduplicate="TemplateStyles:r91035298"></style><span class="reactionable template-reaction test-marker1" title="YFdyh000於2026年1月24日 (六) 16:47 (UTC)回應了這條留言"
+						data-reaction-commentors="YFdyh000於2026年1月24日 (六) 16:47 (UTC)"
+						data-reaction-commentors-json="[{&quot;timestamp&quot;:&quot;2026年1月24日 (六) 16:47 (UTC)&quot;,&quot;user&quot;:&quot;YFdyh000&quot;}]"
+						data-reaction-icon="👍" data-reaction-count="1" data-reaction-real-count="1"><span
+							class="reaction-content"><span class="reaction-icon-container"><span
+									class="reaction-icon">👍</span></span><span class="reaction-counter-container"><span
+									class="reaction-counter">1</span></span></span></span>
+					<div class="cd-comment-menu-wrapper">
+						<div class="cd-comment-menu"><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-button">回覆</a><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-button">編輯</a><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-button" title="對新增此意見的編輯表示感謝">感謝</a></div>
+					</div>
+				</dd>
+				<dd class="cd-comment-part cd-comment-part-first cd-comment-part-last" data-cd-comment-index="23">
+					<div class="cd-comment-header-wrapper">
+						<div class="cd-comment-header">
+							<div class="cd-comment-author-wrapper"><a href="/wiki/User:Cs_haoh" title="User:Cs haoh"
+									class="userlink cd-comment-author"><bdi>Cs haoh</bdi></a> <span
+									class="cd-comment-author-links">（<a href="/wiki/User_talk:Cs_haoh" title="User talk:Cs haoh"
+										class="userlink">討論</a>）</span></div><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-timestamp mw-selflink-fragment cd-comment-button"
+								href="#c-Cs_haoh-20260125013900-Ahfosh-20260124142700" title="2026年1月25日 (日) 01:39 (UTC)">2026年1月25日 (日) 01:39 (UTC)</a><a tabindex="0" role="button"
+								class="cd-comment-button-icon cd-comment-button-goToParent cd-icon cd-comment-button"
+								title="前往上層級意見"><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"
+									class="mw-invert">
+									<path d="M10 5l8 10H2z"></path>
+								</svg></a>
+						</div>
+					</div>Sample text.<span
+						data-mw-comment-sig="c-Cs_haoh-20260125013900-Ahfosh-20260124142700"></span>
+					<div class="cd-comment-menu-wrapper">
+						<div class="cd-comment-menu"><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-button">回覆</a><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-button">編輯</a><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-button" title="對新增此意見的編輯表示感謝">感謝</a></div>
+					</div>
+				</dd>
+				<dd class="cd-comment-part cd-comment-part-first" data-cd-comment-index="24">
+					<div class="cd-comment-header-wrapper">
+						<div class="cd-comment-header">
+							<div class="cd-comment-author-wrapper"><a class="cd-comment-author mw-userlink userlink new"
+									title="User:~2026-51566-3"
+									href="/w/index.php?title=User:~2026-51566-3&amp;action=edit&amp;redlink=1"><bdi>~2026-51566-3</bdi></a>
+								<span class="cd-comment-author-links">（<a
+										href="/w/index.php?title=User_talk:~2026-51566-3&amp;action=edit&amp;redlink=1"
+										class="new userlink" title="User talk:~2026-51566-3（頁面不存在）"
+										data-ipe-edit-mounted="1">討論</a>）</span></div><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-timestamp mw-selflink-fragment cd-comment-button"
+								href="#c-~2026-51566-3-20260125034500-Ahfosh-20260124142700" title="2026年1月25日 (日) 03:45 (UTC)">2026年1月25日 (日) 03:45 (UTC)</a><a tabindex="0" role="button"
+								class="cd-comment-button-icon cd-comment-button-goToParent cd-icon cd-comment-button"
+								title="前往上層級意見"><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"
+									class="mw-invert">
+									<path d="M10 5l8 10H2z"></path>
+								</svg></a>
+						</div>
+					</div>Sample text.
+				</dd>
+				<dd class="cd-comment-part" data-cd-comment-index="24">Sample text.</dd>
+				<dd class="cd-comment-part" data-cd-comment-index="24">Sample text.</dd>
+				<dd class="cd-connectToPreviousItem">
+					<div class="cd-comment-part cd-comment-part-last test-marker2" data-cd-comment-index="24">Sample text.--<span
+							data-mw-comment-sig="c-~2026-51566-3-20260125034500-Ahfosh-20260124142700"></span><a
+							href="/wiki/Special:Contributions/~2026-51566-3" class="mw-tempuserlink userlink"
+							title="Special:Contributions/~2026-51566-3">~2026-51566-3</a><span
+							class="ext-checkuser-tempaccount-reveal-ip-button oo-ui-widget oo-ui-widget-enabled oo-ui-buttonElement oo-ui-buttonElement-frameless oo-ui-labelElement oo-ui-flaggedElement-progressive oo-ui-buttonWidget"><a
+								class="oo-ui-buttonElement-button" role="button" tabindex="0" rel="nofollow"><span
+									class="oo-ui-iconElement-icon oo-ui-iconElement-noIcon oo-ui-image-progressive"></span><span
+									class="oo-ui-labelElement-label">顯示 IP</span><span
+									class="oo-ui-indicatorElement-indicator oo-ui-indicatorElement-noIndicator oo-ui-image-progressive"></span></a></span>（
+						<div class="cd-comment-menu-wrapper">
+							<div class="cd-comment-menu"><a tabindex="0" role="button"
+									class="cd-comment-button-label cd-comment-button">回覆</a><a tabindex="0" role="button"
+									class="cd-comment-button-label cd-comment-button">編輯</a><a tabindex="0" role="button"
+									class="cd-comment-button-label cd-comment-button" title="對新增此意見的編輯表示感謝">感謝</a></div>
 						</div>
 					</div>
-					<ul><li>Sample text.</li></ul>
-				</dd>
-				<dd class="cd-connectToPreviousItem">
-					<div class="cd-comment-part cd-comment-part-last" data-cd-comment-index="4">
-						<span data-mw-comment-sig="${commentId}"></span>
-						<span class="reactionable template-reaction" data-reaction-commentors="Srapoj於2026年1月4日 (日) 06:51 (UTC)" data-reaction-commentors-json="[]" data-reaction-icon="👍" data-reaction-count="1" data-reaction-real-count="1">
-							<span class="reaction-content"><span class="reaction-icon-container"><span class="reaction-icon">👍</span></span><span class="reaction-counter-container"><span class="reaction-counter">1</span></span></span>
-						</span>
-						<div class="cd-comment-menu-wrapper">
-							<div class="cd-comment-menu">
-								<a tabindex="0" role="button" class="cd-comment-button-label cd-comment-button">回覆</a>
+					<dl class="cd-commentLevel cd-commentLevel-2">
+						<dd class="cd-comment-part cd-comment-part-first cd-comment-part-last" data-cd-comment-index="25">
+							<div class="cd-comment-header-wrapper">
+								<div class="cd-comment-header">
+									<div class="cd-comment-author-wrapper"><a href="/wiki/User:Cs_haoh" title=""
+											class="userlink cd-comment-author"><bdi>Cs haoh</bdi></a> <span
+											class="cd-comment-author-links">（<a href="/wiki/User_talk:Cs_haoh"
+												title="User talk:Cs haoh" class="userlink">討論</a>）</span></div><a tabindex="0"
+										role="button"
+										class="cd-comment-button-label cd-comment-timestamp mw-selflink-fragment cd-comment-button"
+										href="#c-Cs_haoh-20260125062200-~2026-51566-3-20260125034500"
+										title="2026年1月25日 (日) 06:22 (UTC)">2026年1月25日 (日) 06:22 (UTC)</a><a tabindex="0"
+										role="button"
+										class="cd-comment-button-icon cd-comment-button-goToParent cd-icon cd-comment-button"
+										title="前往上層級意見"><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"
+											class="mw-invert">
+											<path d="M10 5l8 10H2z"></path>
+										</svg></a>
+								</div>
 							</div>
+							Sample text.<span
+								data-mw-comment-sig="c-Cs_haoh-20260125062200-~2026-51566-3-20260125034500"></span>
+							<div class="cd-comment-menu-wrapper">
+								<div class="cd-comment-menu"><a tabindex="0" role="button"
+										class="cd-comment-button-label cd-comment-button">回覆</a><a tabindex="0" role="button"
+										class="cd-comment-button-label cd-comment-button">編輯</a><a tabindex="0" role="button"
+										class="cd-comment-button-label cd-comment-button" title="對新增此意見的編輯表示感謝">感謝</a></div>
+							</div>
+						</dd>
+					</dl>
+				</dd>
+				<dd class="cd-comment-part cd-comment-part-first" data-cd-comment-index="26">
+					<div class="cd-comment-header-wrapper">
+						<div class="cd-comment-header">
+							<div class="cd-comment-author-wrapper"><a href="/wiki/User:Ahfosh" title="User:Ahfosh"
+									class="userlink cd-comment-author"><bdi>Ahfosh</bdi></a> <span
+									class="cd-comment-author-links">（<a href="/wiki/User_talk:Ahfosh" title=""
+										class="userlink">討論</a>）</span></div><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-timestamp mw-selflink-fragment cd-comment-button"
+								href="#c-Ahfosh-20260125045100-Ahfosh-20260124142700" title="2026年1月25日 (日) 04:51 (UTC)">2026年1月25日 (日) 04:51 (UTC)</a><a tabindex="0"
+								role="button" class="cd-comment-button-icon cd-comment-button-goToParent cd-icon cd-comment-button"
+								title="前往上層級意見"><svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"
+									class="mw-invert">
+									<path d="M10 5l8 10H2z"></path>
+								</svg></a>
 						</div>
+					</div>Sample text.
+				</dd>
+				<dd class="cd-comment-part" data-cd-comment-index="26">Sample text.</dd>
+				<dd class="cd-comment-part" data-cd-comment-index="26">Sample text.</dd>
+				<dd class="cd-comment-part cd-comment-part-last" data-cd-comment-index="26">Sample text.<span
+						data-mw-comment-sig="c-Ahfosh-20260125045100-Ahfosh-20260124142700"></span>
+					<div class="cd-comment-menu-wrapper">
+						<div class="cd-comment-menu"><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-button">回覆</a><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-button">編輯</a><a tabindex="0" role="button"
+								class="cd-comment-button-label cd-comment-button" title="對新增此意見的編輯表示感謝">感謝</a></div>
 					</div>
 				</dd>
 			</dl>
@@ -205,8 +438,14 @@ describe("addReactionButtons", () => {
 
 		await addReactionButtons(document);
 
-		const existingReaction = document.querySelector<HTMLElement>(".template-reaction[data-reaction-commentors]");
-		expect(existingReaction).not.toBeNull();
-		expect(existingReaction?.getAttribute("data-reaction-comment-id")).toBe(commentId);
+		// An existing reaction button
+		const reactionButton1 = document.querySelector<HTMLElement>(".test-marker1");
+		expect(reactionButton1).not.toBeNull();
+		expect(reactionButton1?.getAttribute("data-reaction-comment-id")).toBe("c-静魔魔女-20260124163300-Ahfosh-20260124142700");
+
+		// A newly added reaction button
+		const reactionButton2 = document.querySelector<HTMLElement>(".test-marker2 .reaction-new");
+		expect(reactionButton2).not.toBeNull();
+		expect(reactionButton2?.getAttribute("data-reaction-comment-id")).toBe("c-~2026-51566-3-20260125034500-Ahfosh-20260124142700");
 	});
 });
