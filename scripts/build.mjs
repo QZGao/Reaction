@@ -2,10 +2,12 @@ import esbuild from 'esbuild';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.join(__dirname, "..");
+const require = createRequire(import.meta.url);
 
 const watch = process.argv.includes('--watch');
 const debug = process.argv.includes('--debug');
@@ -17,7 +19,7 @@ const I18N_VIRTUAL_ID = 'virtual:i18n';
 const EMOJI_I18N_VIRTUAL_ID = 'virtual:emoji-i18n';
 const i18nDir = path.join(projectRoot, 'i18n');
 const emojiI18nDir = path.join(projectRoot, 'emoji-i18n');
-const rootVueEntry = path.join(projectRoot, 'node_modules', 'vue');
+const rootVueEntry = require.resolve('vue', { paths: [projectRoot] });
 
 function createRootVueAliasPlugin() {
 	return {
