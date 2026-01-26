@@ -1,16 +1,10 @@
 import {
-	configureCompat,
 	createApp as compatCreateApp,
 	defineComponent as compatDefineComponent,
 	h as compatH,
 	nextTick as compatNextTick,
-} from "@vue/compat";
+} from "vue";
 import type { App as VueApp, DefineComponent as VueDefineComponent } from "vue";
-
-configureCompat({
-	RENDER_FUNCTION: true,
-	ATTR_FALSE_VALUE: true,
-});
 
 type VueCreateApp = typeof import("vue").createApp;
 type VueDefineComponentFn = typeof import("vue").defineComponent;
