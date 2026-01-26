@@ -256,6 +256,6 @@ describe("applyPageModification", () => {
 				timestamp: "13:00, 1 January 2024 (UTC)",
 				upvote: "👍",
 			}),
-		).toThrow("api.errors.timestamp_missing");
+		).toThrow("wikitext.comments.errors.timestamp_not_found");
 	});
 });

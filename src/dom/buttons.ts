@@ -211,15 +211,109 @@ function findCommentStartMarker(node: HTMLElement): HTMLElement | null {
 }
 
 /**
- * Escape a string for use in a CSS selector.
- * @param value - String to escape.
- * @returns Escaped string.
+ * Resolve a comment marker id from a container element.
+ * @param container - Element that may contain comment marker attributes.
+ * @returns Comment marker id or null if unavailable.
  */
-function escapeSelectorValue(value: string): string {
-	if (typeof CSS !== "undefined" && CSS.escape) {
-		return CSS.escape(value);
+function getCommentMarkerId(container: HTMLElement | null): string | null {
+	if (!container) {
+		return null;
 	}
-	return value.replace(/["\\]/g, "\\$&");
+	const marker = container.matches(COMMENT_MARKER_SELECTOR)
+		? container
+		: container.querySelector<HTMLElement>(COMMENT_MARKER_SELECTOR);
+	return (
+		marker?.getAttribute("data-mw-comment-sig") ||
+		marker?.id ||
+		marker?.getAttribute("id") ||
+		null
+	);
+}
+
+/**
+ * Check whether a timestamp element matches a comment id.
+ * @param timestamp - Timestamp element.
+ * @param commentId - Comment id to match.
+ * @returns True if the timestamp points to the comment id.
+ */
+function matchesCommentId(timestamp: HTMLElement, commentId: string): boolean {
+	const attrId = timestamp.getAttribute("data-mw-comment-id");
+	if (attrId && attrId === commentId) {
+		return true;
+	}
+	const href = timestamp.getAttribute("href");
+	if (!href) {
+		return false;
+	}
+	const hashIndex = href.indexOf("#");
+	if (hashIndex === -1) {
+		return false;
+	}
+	return href.slice(hashIndex + 1) === commentId;
+}
+
+/**
+ * Find a timestamp element that matches a comment id.
+ * @param container - Container to search first.
+ * @param commentId - Comment id to match.
+ * @returns Timestamp element or null if not found.
+ */
+function findTimestampByCommentId(container: HTMLElement, commentId: string): HTMLElement | null {
+	const localCandidates = Array.from(container.querySelectorAll<HTMLElement>(TIMESTAMP_SELECTOR));
+	for (const candidate of localCandidates) {
+		if (matchesCommentId(candidate, commentId)) {
+			return candidate;
+		}
+	}
+	const doc = container.ownerDocument;
+	if (!doc) {
+		return null;
+	}
+	const globalCandidates = Array.from(doc.querySelectorAll<HTMLElement>(TIMESTAMP_SELECTOR));
+	for (const candidate of globalCandidates) {
+		if (matchesCommentId(candidate, commentId)) {
+			return candidate;
+		}
+	}
+	return null;
+}
+
+/**
+ * Find the last timestamp within a descendant subtree.
+ * @param root - Root element to search.
+ * @returns Timestamp element or null if none found.
+ */
+function findLastDescendantTimestamp(root: HTMLElement): HTMLElement | null {
+	const matches = root.querySelectorAll<HTMLElement>(TIMESTAMP_SELECTOR);
+	if (matches.length === 0) {
+		return null;
+	}
+	return matches[matches.length - 1] ?? null;
+}
+
+/**
+ * Find the nearest timestamp before a node within a boundary.
+ * @param node - Node to start from.
+ * @param boundary - Boundary element to stay within.
+ * @returns Timestamp element or null if not found.
+ */
+function findNearestTimestampBeforeNode(node: HTMLElement, boundary: HTMLElement): HTMLElement | null {
+	let current: HTMLElement | null = node;
+	while (current && boundary.contains(current)) {
+		let sibling = current.previousElementSibling as HTMLElement | null;
+		while (sibling) {
+			if (sibling.matches?.(TIMESTAMP_SELECTOR)) {
+				return sibling;
+			}
+			const descendantTimestamp = findLastDescendantTimestamp(sibling);
+			if (descendantTimestamp) {
+				return descendantTimestamp;
+			}
+			sibling = sibling.previousElementSibling as HTMLElement | null;
+		}
+		current = current.parentElement;
+	}
+	return null;
 }
 
 /**
@@ -231,30 +325,17 @@ function findTimestampWithinComment(comment: HTMLElement | null): HTMLElement | 
 	if (!comment) {
 		return null;
 	}
-	const direct = comment.querySelector<HTMLElement>(TIMESTAMP_SELECTOR);
-	if (direct) {
-		return direct;
-	}
-	const index = comment.getAttribute("data-cd-comment-index");
-	if (index) {
-		const selector = `.cd-comment-part[data-cd-comment-index="${escapeSelectorValue(index)}"]`;
-		const relatedNodeList = comment.ownerDocument?.querySelectorAll(selector) ?? null;
-		const relatedParts = relatedNodeList
-			? Array.from(relatedNodeList).filter(
-				(part): part is HTMLElement => part instanceof HTMLElement,
-			)
-			: [];
-		for (const part of relatedParts) {
-			if (part === comment) {
-				continue;
+	const commentId = getCommentMarkerId(comment);
+	if (commentId) {
+		const byId = findTimestampByCommentId(comment, commentId);
+		if (byId) {
+			if (!byId.getAttribute("data-reaction-comment-id")) {
+				byId.setAttribute("data-reaction-comment-id", commentId);
 			}
-			const timestamp = part.querySelector<HTMLElement>(TIMESTAMP_SELECTOR);
-			if (timestamp) {
-				return timestamp;
-			}
+			return byId;
 		}
 	}
-	return null;
+	return comment.querySelector<HTMLElement>(TIMESTAMP_SELECTOR);
 }
 
 /**
@@ -267,14 +348,12 @@ function assignCommentMetadataFromDom(
 	timestampElement: HTMLElement,
 	lookup: DiscussionToolsLookup | null,
 ): ThreadCommentMetadata | null {
-	const marker = findCommentStartMarker(timestampElement);
-	if (!marker) {
+	const commentContainer = timestampElement.closest<HTMLElement>(".cd-comment-part")
+		?? timestampElement.closest<HTMLElement>("li, dd, p");
+	const commentId = getCommentMarkerId(commentContainer) ?? getCommentMarkerId(timestampElement);
+	if (!commentId) {
 		return null;
 	}
-	const commentId =
-		marker.getAttribute("data-mw-comment-sig") ||
-		marker.id ||
-		marker.getAttribute("id");
 	if (commentId) {
 		timestampElement.setAttribute("data-reaction-comment-id", commentId);
 	}
@@ -947,30 +1026,33 @@ function resolveTimestampForNode(node: HTMLElement): HTMLElement | null {
 	if (existing) {
 		return existing;
 	}
-
-	// Walk backwards through siblings to inherit the mapping.
-	let sibling = node.previousElementSibling as HTMLElement | null;
-	while (sibling) {
-		const siblingTimestamp = _buttonTimestamps.get(sibling);
-		if (siblingTimestamp) {
-			_buttonTimestamps.set(node, siblingTimestamp);
-			return siblingTimestamp;
-		}
-		if (sibling.matches?.(TIMESTAMP_SELECTOR)) {
-			_buttonTimestamps.set(node, sibling);
-			return sibling;
-		}
-		sibling = sibling.previousElementSibling as HTMLElement | null;
+	const commentContainer = node.closest<HTMLElement>(".cd-comment-part")
+		?? node.closest<HTMLElement>("li, dd, p")
+		?? node.parentElement;
+	if (!commentContainer) {
+		return null;
 	}
-
-	// Fall back to scanning the Convenient Discussions comment container.
-	const commentContainer = node.closest(".cd-comment-part, li, dd, p");
-	const timestamp =
-		commentContainer?.querySelector<HTMLElement>(TIMESTAMP_SELECTOR) ??
-		findTimestampWithinComment(node.closest(".cd-comment-part"));
-	if (timestamp) {
-		_buttonTimestamps.set(node, timestamp);
-		return timestamp;
+	const marker = findCommentStartMarker(node);
+	const commentId = getCommentMarkerId(marker) ?? getCommentMarkerId(commentContainer);
+	if (commentId) {
+		const byId = findTimestampByCommentId(commentContainer, commentId);
+		if (byId) {
+			if (!byId.getAttribute("data-reaction-comment-id")) {
+				byId.setAttribute("data-reaction-comment-id", commentId);
+			}
+			_buttonTimestamps.set(node, byId);
+			return byId;
+		}
+	}
+	const nearest = findNearestTimestampBeforeNode(node, commentContainer);
+	if (nearest) {
+		_buttonTimestamps.set(node, nearest);
+		return nearest;
+	}
+	const fallback = findTimestampWithinComment(commentContainer);
+	if (fallback) {
+		_buttonTimestamps.set(node, fallback);
+		return fallback;
 	}
 	return null;
 }

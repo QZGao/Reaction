@@ -122,15 +122,23 @@ ${emojiMartStyles}
 	border-radius: 8px;
 	background: #fff;
 }
-.${PICKER_CLASS}__notice {
-	position: absolute;
-	right: 10px;
-	top: 86px;
-	font-size: 0.72em;
-	color: #72777d;
-	pointer-events: none;
-}
-`;
+	.${PICKER_CLASS}__notice {
+		position: absolute;
+		right: 10px;
+		top: 86px;
+		font-size: 0.72em;
+		color: #72777d;
+		pointer-events: none;
+	}
+	@media (max-width: 380px) {
+		.${PICKER_CLASS} {
+			max-width: 92vw;
+		}
+		.${PICKER_CLASS} .emoji-mart {
+			width: 100% !important;
+		}
+	}
+	`;
 	root.appendChild(styleElement);
 }
 

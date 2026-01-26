@@ -167,9 +167,9 @@ export function applyPageModification(fulltext: string, mod: ModifyPageRequest):
 	const position = locateResult.position;
 	if (position === null) {
 		const reason = locateResult.reason ? ` Reason: ${locateResult.reason}.` : "";
-		console.log(`[Reaction] Unable to locate timestamp ${mod.timestamp}.${reason}`);
+		console.error(`[Reaction] Unable to locate timestamp ${mod.timestamp}.${reason}`);
 		const baseMessage = tReaction("api.errors.timestamp_missing", [mod.timestamp]);
-		const errorMessage = locateResult.reason ? `${baseMessage} (${locateResult.reason})` : baseMessage;
+		const errorMessage = locateResult.reason ? locateResult.reason : baseMessage;
 		throw new Error(errorMessage);
 	}
 
