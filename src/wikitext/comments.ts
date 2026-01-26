@@ -123,7 +123,7 @@ function getUserLinkRegex(): RegExp {
 			? combined
 			: "(?:user(?:[ _]talk)?)"; // fallback if namespace lookup fails entirely
 	cachedUserLinkRegex = new RegExp(
-		`\\[\\[\\s*(?:${pattern})\\s*:\\s*([^[\\]|#]+)(?:#[^\\]|]*)?(?:\\|[^\\]]*)?\\]\\]`,
+		`\\[\\[\\s*(?:${pattern})\\s*:\\s*([^\\[\\]|]+)(?:\\|[^\\]]*)?\\]\\]`,
 		"gi",
 	);
 	return cachedUserLinkRegex;
@@ -143,7 +143,7 @@ function getContributionLinkRegex(): RegExp {
 		cachedContributionLinkRegex = new RegExp("a^", "g"); // never matches
 		return cachedContributionLinkRegex;
 	}
-	const pattern = `\\[\\[\\s*(?:${specialPattern})\\s*:\\s*(?:${contributionsPattern})\\s*(?:\\/|%2F)([^|\\]#]+)(?:#[^|\\]]*)?(?:\\|[^\\]]*)?\\]\\]`;
+	const pattern = `\\[\\[\\s*(?:${specialPattern})\\s*:\\s*(?:${contributionsPattern})\\s*(?:\\/|%2F)([^|\\]]+)(?:\\|[^\\]]*)?\\]\\]`;
 	cachedContributionLinkRegex = new RegExp(pattern, "gi");
 	return cachedContributionLinkRegex;
 }
@@ -158,12 +158,30 @@ function escapeRegexLiteral(text: string): string {
 }
 
 /**
+ * Decode numeric HTML entities in a string.
+ * @param text - Input string.
+ * @returns Decoded string.
+ */
+function decodeNumericEntities(text: string): string {
+	return text.replace(/&#(x[0-9a-f]+|\d+);/gi, (_match: string, raw: string) => {
+		const value = raw.toLowerCase().startsWith("x")
+			? Number.parseInt(raw.slice(1), 16)
+			: Number.parseInt(raw, 10);
+		if (!Number.isFinite(value) || value < 0 || value > 0x10ffff) {
+			return _match;
+		}
+		return String.fromCodePoint(value);
+	});
+}
+
+/**
  * Normalize a user identifier for consistent matching.
  * @param value - User identifier.
  * @returns Normalized user identifier.
  */
 function normalizeUserValue(value: string): string {
-	const normalized = normalizeTitle(value.replace(/_/g, " "));
+	const decoded = decodeNumericEntities(value);
+	const normalized = normalizeTitle(decoded.replace(/_/g, " "));
 	return normalized.toLowerCase();
 }
 
@@ -178,7 +196,9 @@ function collectLinkedUsers(snippet: string): string[] {
 	userLinkRegex.lastIndex = 0;
 	let match: RegExpExecArray | null;
 	while ((match = userLinkRegex.exec(snippet)) !== null) {
-		const target = match[1] ?? "";
+		const rawTarget = match[1] ?? "";
+		const decodedTarget = decodeNumericEntities(rawTarget);
+		const target = decodedTarget.split("#")[0] ?? "";
 		if (target.includes("/")) {
 			continue;
 		}
@@ -188,7 +208,9 @@ function collectLinkedUsers(snippet: string): string[] {
 	const contribRegex = getContributionLinkRegex();
 	contribRegex.lastIndex = 0;
 	while ((match = contribRegex.exec(snippet)) !== null) {
-		const target = match[1] ?? "";
+		const rawTarget = match[1] ?? "";
+		const decodedTarget = decodeNumericEntities(rawTarget);
+		const target = decodedTarget.split("#")[0] ?? "";
 		if (target.includes("/")) {
 			continue;
 		}
