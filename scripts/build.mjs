@@ -17,6 +17,18 @@ const I18N_VIRTUAL_ID = 'virtual:i18n';
 const EMOJI_I18N_VIRTUAL_ID = 'virtual:emoji-i18n';
 const i18nDir = path.join(projectRoot, 'i18n');
 const emojiI18nDir = path.join(projectRoot, 'emoji-i18n');
+const rootVueEntry = path.join(projectRoot, 'node_modules', 'vue');
+
+function createRootVueAliasPlugin() {
+	return {
+		name: 'root-vue-alias',
+		setup(build) {
+			build.onResolve({ filter: /^vue$/ }, () => ({
+				path: rootVueEntry,
+			}));
+		},
+	};
+}
 
 function createLocaleDataPlugin({ name, virtualId, namespace, dir, locales }) {
 	return {
@@ -118,6 +130,7 @@ const createBuildOptions = ({ outfile, locales, emojiLocales }) => {
 		plugins: [
 			createI18nCatalogPlugin(locales),
 			createEmojiI18nPlugin(emojiLocales),
+			createRootVueAliasPlugin(),
 		],
 		define: {
 			__VUE_OPTIONS_API__: 'true',
