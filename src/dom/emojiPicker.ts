@@ -4,7 +4,7 @@ import {
 	compatRender,
 	compatNextTick,
 	type CompatApp,
-} from "../vueCompat";
+} from "../vueRuntime";
 import { Picker, EmojiIndex } from "emoji-mart-vue-fast";
 import { getCustomEmojis, getCustomEmojiTextMap } from "../emojis/customEmojis";
 import seedRecentEmojis from "../emojis/seedRecentEmojis";
