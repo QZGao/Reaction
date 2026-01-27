@@ -3,6 +3,10 @@ import { fetchPageProperties, doesPageExist } from "./api/client";
 import { isVector2022Appearance, updateAppearancePortlet } from "./dom/cdxPortlet";
 import { updateLegacyReactionPortlets } from "./dom/portlet";
 
+const PAGE_NAME_WHITELIST: string[] = [
+	"Wikipedia:新条目推荐/候选",
+];
+
 interface MagicWordDescriptor {
 	property: string;
 	labels: string[];
@@ -42,6 +46,11 @@ async function isReactionModuleAvailable(): Promise<boolean> {
  */
 async function shouldSkipPage(): Promise<boolean> {
 	if (skipCache !== null) {
+		return skipCache;
+	}
+	const pageName = mw.config.get("wgPageName");
+	if (PAGE_NAME_WHITELIST.includes(pageName)) {
+		skipCache = false;
 		return skipCache;
 	}
 	const namespaceNumber = mw.config.get("wgNamespaceNumber") as number | null | undefined;
