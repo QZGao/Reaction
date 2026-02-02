@@ -15,7 +15,7 @@ const customEmojiDefinitions: CustomEmojiDefinition[] = [
 		name: "orz",
 		short_names: ["orz"],
 		text: "File:Symbol_囧_vote.svg",
-		imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Symbol_%E5%9B%A7_vote.svg/40px-Symbol_%E5%9B%A7_vote.svg.png",
+		imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Symbol_%E5%9B%A7_vote.svg/20px-Symbol_%E5%9B%A7_vote.svg.png",
 		keywords: ["orz"],
 		i18n: {
 			"zh-hans": { name: "囧", keywords: ["囧", "orz"] },
@@ -26,7 +26,7 @@ const customEmojiDefinitions: CustomEmojiDefinition[] = [
 		name: "doge",
 		short_names: ["doge"],
 		text: "File:Doge.png",
-		imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Doge.svg/40px-Doge.svg.png",
+		imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Doge.svg/20px-Doge.svg.png",
 		keywords: ["doge"],
 		i18n: {
 			"zh-hans": { name: "狗头", keywords: ["狗头", "doge"] },
@@ -37,7 +37,7 @@ const customEmojiDefinitions: CustomEmojiDefinition[] = [
 		name: "cyberduck",
 		short_names: ["cyberduck"],
 		text: "File:Cyberduck_icon.png",
-		imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Cyberduck_icon.png/40px-Cyberduck_icon.png",
+		imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Cyberduck_icon.png/20px-Cyberduck_icon.png",
 		keywords: ["cyberduck", "duck test"],
 		i18n: {
 			"zh-hans": { name: "鸭子测试", keywords: ["鸭子测试", "一望而知", "cyberduck", "duck test"] },
@@ -48,7 +48,7 @@ const customEmojiDefinitions: CustomEmojiDefinition[] = [
 		name: "wikipedia",
 		short_names: ["wikipedia"],
 		text: "File:Wikipedia's_W.svg",
-		imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/Wikipedia%27s_W.svg/40px-Wikipedia%27s_W.svg.png",
+		imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/Wikipedia%27s_W.svg/20px-Wikipedia%27s_W.svg.png",
 		keywords: ["wikipedia"],
 		i18n: {
 			"zh-hans": { name: "维基百科", keywords: ["维基百科", "wikipedia"] },
