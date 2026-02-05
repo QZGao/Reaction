@@ -19,6 +19,7 @@ const MAGIC_WORD_SKIP: MagicWordDescriptor[] = [
 
 let skipCache: boolean | null = null;
 let modulePresenceCache: boolean | null = null;
+const INIT_GUARD_KEY = "__reactionInitStarted__";
 
 /**
  * Check if Module:Reaction exists on the wiki.
@@ -131,4 +132,13 @@ async function init() {
 	}, 0);
 }
 
-void init();
+const globalState = globalThis as typeof globalThis & {
+	[INIT_GUARD_KEY]?: boolean;
+};
+
+if (globalState[INIT_GUARD_KEY]) {
+	console.warn("[Reaction] Initialization skipped because it already ran.");
+} else {
+	globalState[INIT_GUARD_KEY] = true;
+	void init();
+}
