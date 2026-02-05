@@ -19,7 +19,7 @@ const MAGIC_WORD_SKIP: MagicWordDescriptor[] = [
 
 let skipCache: boolean | null = null;
 let modulePresenceCache: boolean | null = null;
-const INIT_GUARD_KEY = "__reactionInitStarted__";
+const INIT_GUARD_KEY = "__REACTION_INIT_STARTED__";
 
 /**
  * Check if Module:Reaction exists on the wiki.
