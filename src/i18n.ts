@@ -1,6 +1,6 @@
 import rawCatalogues from 'virtual:i18n';
 import rawEmojiI18n from 'virtual:emoji-i18n';
-import { encodeTitle, normalizeTitle } from './utils';
+import { encodeTitle, normalizeTitle } from './titleUtils';
 
 type ReplacementValue = string | number;
 export type MessageParams = ReplacementValue[];
@@ -16,8 +16,8 @@ export type RichMessageSegment =
 	| { type: 'text'; text: string }
 	| { type: 'link'; text: string; href: string };
 
-let fallbackLocale = resolveFallbackLocale();
-let activeLocale: LocaleCode = detectInitialLocale();
+let fallbackLocale: LocaleCode = "en" as LocaleCode;
+let activeLocale: LocaleCode = "en" as LocaleCode;
 const REACTION_PREFIX = "[Reaction] ";
 
 export interface EmojiI18nData {
@@ -101,7 +101,7 @@ function resolveFallbackLocale(): LocaleCode {
 	}
 	const locales = Object.keys(catalogues).filter(isSupportedLocale);
 	if (locales.length === 0) {
-		throw new Error('[Reaction] No i18n catalogues registered');
+		return 'en' as LocaleCode;
 	}
 	return locales[0];
 }
@@ -261,6 +261,16 @@ function mergeEmojiI18n(next: Record<string, EmojiI18nData>): void {
 }
 
 /**
+ * Persist emoji i18n data into the shared global snapshot for other bundles.
+ * @param next - Emoji i18n payload to persist.
+ */
+function persistGlobalEmojiI18n(next: Record<string, EmojiI18nData>): void {
+	const globalObj = globalThis as Record<string, unknown>;
+	const existing = normalizeEmojiI18n(globalObj[GLOBAL_EMOJI_I18N_KEY]);
+	globalObj[GLOBAL_EMOJI_I18N_KEY] = Object.assign(existing, next);
+}
+
+/**
  * Merge new catalogue data into the existing store.
  * @param next - New catalogue data.
  */
@@ -273,6 +283,16 @@ function mergeCatalogues(next: CatalogueMap): void {
 }
 
 /**
+ * Persist i18n catalogue data into the shared global snapshot for other bundles.
+ * @param next - Catalogue payload to persist.
+ */
+function persistGlobalCatalogues(next: CatalogueMap): void {
+	const globalObj = globalThis as Record<string, unknown>;
+	const existing = normalizeCatalogues(globalObj[GLOBAL_I18N_KEY]);
+	globalObj[GLOBAL_I18N_KEY] = Object.assign(existing, next);
+}
+
+/**
  * Register new i18n catalogue data.
  * @param input - New catalogue data.
  */
@@ -282,6 +302,7 @@ export function registerI18nCatalogues(input: unknown): void {
 		return;
 	}
 	mergeCatalogues(normalized);
+	persistGlobalCatalogues(normalized);
 }
 
 /**
@@ -294,6 +315,7 @@ export function registerEmojiI18nData(input: unknown): void {
 		return;
 	}
 	mergeEmojiI18n(normalized);
+	persistGlobalEmojiI18n(normalized);
 }
 
 /**
@@ -305,11 +327,9 @@ function consumeGlobalI18n(): void {
 	const pendingEmoji = globalObj[GLOBAL_EMOJI_I18N_KEY];
 	if (pendingI18n) {
 		registerI18nCatalogues(pendingI18n);
-		delete globalObj[GLOBAL_I18N_KEY];
 	}
 	if (pendingEmoji) {
 		registerEmojiI18nData(pendingEmoji);
-		delete globalObj[GLOBAL_EMOJI_I18N_KEY];
 	}
 	globalObj[GLOBAL_REGISTER_I18N_KEY] = registerI18nCatalogues;
 	globalObj[GLOBAL_REGISTER_EMOJI_I18N_KEY] = registerEmojiI18nData;
@@ -413,6 +433,8 @@ export function resolveEmojiI18nData(locale: LocaleCode): EmojiI18nData | null {
 }
 
 consumeGlobalI18n();
+fallbackLocale = resolveFallbackLocale();
+refreshLocale();
 
 /**
  * Parse wiki-style links into structured segments.
