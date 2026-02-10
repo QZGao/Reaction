@@ -12,6 +12,23 @@ type ReactionFeatureApi = {
 
 let featureLoadPromise: Promise<ReactionFeatureApi> | null = null;
 let featureBootstrapped = false;
+let cachedBaseScriptUrl: string | null = captureInitialBaseScriptUrl();
+
+/**
+ * Capture the currently executing script URL as early as possible.
+ * `document.currentScript` is only reliable during synchronous script execution.
+ * @returns Script URL or null when unavailable.
+ */
+function captureInitialBaseScriptUrl(): string | null {
+	if (typeof document === "undefined") {
+		return null;
+	}
+	const currentScript = document.currentScript;
+	if (currentScript instanceof HTMLScriptElement && currentScript.src) {
+		return currentScript.src;
+	}
+	return null;
+}
 
 /**
  * Handle feature bundle load failures with shared logging and user notification.
@@ -48,10 +65,6 @@ function getFeatureApi(): ReactionFeatureApi | null {
  * @param url - Script URL to evaluate.
  * @returns True if the URL matches expected base Reaction bundle patterns; otherwise false.
  */
-function isBaseReactionBundleUrl(url: string): boolean {
-	return /(?:^|\/)(?:Gadget-)?Reaction\.js(?:[?#]|$|&)/i.test(url);
-}
-
 /**
  * Insert "-feature" before the trailing ".js" in a file name.
  * @param fileName - Source JavaScript file name.
@@ -93,21 +106,15 @@ function toFeatureScriptUrl(sourceUrl: string): string | null {
  * @returns Matched Reaction script URL, or null when unavailable.
  */
 function detectCurrentReactionScriptUrl(): string | null {
+	if (cachedBaseScriptUrl) {
+		return cachedBaseScriptUrl;
+	}
 	const currentScript = document.currentScript;
-	if (currentScript instanceof HTMLScriptElement && currentScript.src && isBaseReactionBundleUrl(currentScript.src)) {
-		return currentScript.src;
+	if (currentScript instanceof HTMLScriptElement && currentScript.src) {
+		cachedBaseScriptUrl = currentScript.src;
+		return cachedBaseScriptUrl;
 	}
 
-	const scripts = Array.from(document.getElementsByTagName("script"));
-	for (let i = scripts.length - 1; i >= 0; i -= 1) {
-		const src = scripts[i].src;
-		if (!src) {
-			continue;
-		}
-		if (isBaseReactionBundleUrl(src)) {
-			return src;
-		}
-	}
 	return null;
 }
 
