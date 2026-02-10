@@ -7,6 +7,10 @@ const REACTION_CONFIG_VAR = "ujsReactionConfig";
 const REACTION_BLACKLIST_SESSION_STORAGE_KEY = "reaction.blacklistByUser";
 const blacklistLookupPromises = new Map<string, Promise<boolean>>();
 
+/**
+ * Get the current user's Reaction config subpage title.
+ * @returns User config title or null when user is not logged in.
+ */
 function getUserConfigTitle(): string | null {
 	if (!state.userName) {
 		return null;
@@ -14,14 +18,29 @@ function getUserConfigTitle(): string | null {
 	return `User:${state.userName}/Reaction-config.js`;
 }
 
+/**
+ * Build Reaction config JS payload.
+ * @param blacklist - Blacklist flag to serialize.
+ * @returns Config script text.
+ */
 function buildConfigText(blacklist: boolean): string {
 	return `${REACTION_CONFIG_VAR} = {\n\tblacklist: ${blacklist}\n};\n`;
 }
 
+/**
+ * Build the Reaction config subpage title for a specific user.
+ * @param userName - Target user name.
+ * @returns User config page title.
+ */
 function getUserConfigTitleFor(userName: string): string {
 	return `User:${userName}/Reaction-config.js`;
 }
 
+/**
+ * Parse blacklist flag from config script text.
+ * @param source - Raw config page content.
+ * @returns Parsed blacklist value; false when missing.
+ */
 function parseBlacklistFromConfigText(source: string): boolean {
 	const match = source.match(/\bblacklist\s*:\s*(true|false)\b/i);
 	if (!match) {
@@ -30,6 +49,10 @@ function parseBlacklistFromConfigText(source: string): boolean {
 	return match[1].toLowerCase() === "true";
 }
 
+/**
+ * Read the session cache map for target-user blacklist status.
+ * @returns Mapping of normalized user names to blacklist flags.
+ */
 function readSessionBlacklistMap(): Record<string, boolean> {
 	if (typeof window === "undefined" || !("sessionStorage" in window)) {
 		return {};
@@ -55,6 +78,10 @@ function readSessionBlacklistMap(): Record<string, boolean> {
 	}
 }
 
+/**
+ * Persist target-user blacklist map into sessionStorage.
+ * @param map - Mapping of normalized user names to blacklist flags.
+ */
 function writeSessionBlacklistMap(map: Record<string, boolean>): void {
 	if (typeof window === "undefined" || !("sessionStorage" in window)) {
 		return;
@@ -62,6 +89,12 @@ function writeSessionBlacklistMap(map: Record<string, boolean>): void {
 	window.sessionStorage.setItem(REACTION_BLACKLIST_SESSION_STORAGE_KEY, JSON.stringify(map));
 }
 
+/**
+ * Insert or replace `ujsReactionConfig` block in config page text.
+ * @param source - Existing config page content.
+ * @param blacklist - Blacklist flag to write.
+ * @returns Updated page text.
+ */
 function upsertConfigBlock(source: string, blacklist: boolean): string {
 	const nextBlock = buildConfigText(blacklist).trim();
 	const assignmentRegex = new RegExp(`${REACTION_CONFIG_VAR}\\s*=\\s*\\{[\\s\\S]*?\\}\\s*;?`, "m");
@@ -106,7 +139,7 @@ export function persistReactionBlacklistToUserConfig(blacklist: boolean): void {
 				console.error("[Reaction] Failed to persist Reaction-config.js.", error);
 				mw.notify(tReaction("api.notifications.save_failure"), { title: t("default.titles.error"), type: "error" });
 			}
-			});
+		});
 }
 
 /**
