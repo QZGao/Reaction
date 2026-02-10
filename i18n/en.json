@@ -15,9 +15,11 @@
 	"dom.appearance.enable": "Enable",
 	"dom.appearance.disable": "Disable",
 	"dom.appearance.hide_all": "Hide all",
+	"dom.appearance.blacklist": "I don't want to receive Reactions",
 	"dom.confirm.add": "Are you sure you want to add this Reaction?",
 	"dom.confirm.remove": "Are you sure you want to remove this Reaction?",
 	"dom.confirm.hide_reactions": "Hide all Reactions on the page?",
+	"dom.confirm.blacklist_reactions": "Do you want to stop receiving Reactions?",
 	"dom.errors.duplicate_reaction": "Failed! You cannot react twice.",
 	"dom.errors.input_empty": "Reaction content cannot be empty!",
 	"dom.errors.missing_timestamp": "Failed! Unable to obtain the timestamp.",
@@ -26,6 +28,7 @@
 	"dom.portlets.disable_reaction": "Disable Reaction",
 	"dom.portlets.enable_reaction": "Enable Reaction",
 	"dom.portlets.hide_reactions": "Hide all Reactions",
+	"dom.portlets.blacklist_reactions": "I don't want to receive Reactions",
 	"dom.portlets.unhide_reactions": "Unhide Reactions",
 	"dom.reactions.comment_stamp": "$1 at $2",
 	"dom.reactions.label": "Reaction",
@@ -59,5 +62,6 @@
 	"emojiPicker.i18n.categories.symbols": "Symbols",
 	"emojiPicker.i18n.categories.flags": "Flags",
 	"emojiPicker.i18n.categories.custom": "Custom",
-	"emojiPicker.notice.reaction_visibility": "Reactions may be hidden for some users."
+	"emojiPicker.notice.reaction_visibility": "Reactions may be hidden for some users.",
+	"emojiPicker.notice.reaction_blacklisted": "This user doesn't allow being reacted on."
 }

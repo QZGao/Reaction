@@ -19,7 +19,8 @@ import {
 	type ThreadCommentMetadata,
 	type DiscussionToolsLookup,
 } from "../api/discussionTools";
-import { showEmojiPicker, hideEmojiPicker } from "./emojiPicker";
+import { resolveReactionBlacklistForUser } from "../api/userConfig";
+import { showEmojiPicker, hideEmojiPicker, setEmojiPickerNotice, isEmojiPickerShownFor } from "./emojiPicker";
 
 /**
  * Registry for reaction event handlers. WeakMap stores handler references so they can be removed later.
@@ -47,6 +48,7 @@ const COMMENT_METADATA_ATTRIBUTES = [
 	"data-reaction-comment-author",
 	"data-reaction-comment-timestamp",
 ] as const;
+const REACTION_BLACKLISTED_NOTICE_KEY = "emojiPicker.notice.reaction_blacklisted";
 
 interface StoredCommentMetadata {
 	commentId?: string | null;
@@ -546,10 +548,32 @@ function getCommentContext(button: HTMLElement): CommentContext | null {
 }
 
 /**
+ * Resolve whether the target comment author disallows reactions.
+ * @param button - Reaction button element.
+ * @returns Promise resolving to true when reactions are blocked by target config.
+ */
+async function isReactionBlacklistedByTarget(button: HTMLElement): Promise<boolean> {
+	const context = getCommentContext(button);
+	const targetUser = context?.author;
+	if (!targetUser) {
+		return false;
+	}
+	return resolveReactionBlacklistForUser(targetUser);
+}
+
+/**
  * Dispatch click events from any reaction button to the appropriate handler.
  * @param button {HTMLElement} - Reaction button element.
  */
-function handleReactionClick(button: HTMLElement) {
+function handleReactionClick(button: HTMLElement): void {
+	void handleReactionClickAsync(button);
+}
+
+/**
+ * Async click dispatcher that resolves target blacklist config before toggling.
+ * @param button - Reaction button element.
+ */
+async function handleReactionClickAsync(button: HTMLElement): Promise<void> {
 	if (!canReact()) {
 		return;
 	}
@@ -561,6 +585,15 @@ function handleReactionClick(button: HTMLElement) {
 			// Ignore buttons with invalid icons.
 			mw.notify(tReaction("dom.notify.invalid_icon"), { title: t("default.titles.error"), type: "error" });
 			console.error("[Reaction] Invalid reaction icon.");
+			return;
+		}
+
+		const targetBlacklisted = await isReactionBlacklistedByTarget(button);
+		if (targetBlacklisted) {
+			await OO.ui.alert(t(REACTION_BLACKLISTED_NOTICE_KEY), {
+				title: t("default.titles.confirm"),
+				size: "small",
+			});
 			return;
 		}
 
@@ -699,6 +732,24 @@ function saveNewReaction(button: HTMLElement, event: MouseEvent | false) {
 		event.stopPropagation();
 	}
 
+	void saveNewReactionAsync(button);
+}
+
+/**
+ * Save a newly created reaction and update the button state.
+ * Performs target blacklist check before making API edits.
+ * @param button - The "new reaction" button element.
+ */
+async function saveNewReactionAsync(button: HTMLElement): Promise<void> {
+	const targetBlacklisted = await isReactionBlacklistedByTarget(button);
+	if (targetBlacklisted) {
+		await OO.ui.alert(t(REACTION_BLACKLISTED_NOTICE_KEY), {
+			title: t("default.titles.confirm"),
+			size: "small",
+		});
+		return;
+	}
+
 	let input = button.querySelector<HTMLInputElement>(".reaction-icon input");
 	if (!input) {
 		console.error("[Reaction] Missing input element inside reaction icon.");
@@ -831,6 +882,14 @@ function addNewReaction(button: HTMLElement) {
 		const openEmojiPicker = () => {
 			void showEmojiPicker(button, input).catch((error) => {
 				console.error("[Reaction] Failed to load emoji picker.", error);
+			});
+			void isReactionBlacklistedByTarget(button).then((targetBlacklisted) => {
+				if (!isEmojiPickerShownFor(button)) {
+					return;
+				}
+				if (targetBlacklisted) {
+					setEmojiPickerNotice(t(REACTION_BLACKLISTED_NOTICE_KEY));
+				}
 			});
 		};
 		input.addEventListener("focus", openEmojiPicker);

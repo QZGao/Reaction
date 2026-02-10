@@ -2,6 +2,7 @@ import { addReactionButtons } from "./dom/buttons";
 import { fetchPageProperties, doesPageExist } from "./api/client";
 import { isVector2022Appearance, updateAppearancePortlet } from "./dom/cdxPortlet";
 import { updateLegacyReactionPortlets } from "./dom/portlet";
+import { syncCurrentUserBlacklistFromUserConfig } from "./api/userConfig";
 
 const PAGE_NAME_WHITELIST: string[] = [
 	"Wikipedia:新条目推荐/候选",
@@ -107,6 +108,7 @@ async function init() {
 	if (await shouldSkipPage()) {
 		return;
 	}
+	await syncCurrentUserBlacklistFromUserConfig();
 	if (isVector2022Appearance()) {
 		updateAppearancePortlet();
 	} else {

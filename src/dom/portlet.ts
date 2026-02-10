@@ -1,11 +1,21 @@
-import state, { setReactionHidden } from "../state";
+import state, { setReactionBlacklist, setReactionHidden } from "../state";
 import { toggleReactionEnabled } from "./buttons";
 import { t } from "../i18n";
+import { persistReactionBlacklistToUserConfig } from "../api/userConfig";
 
 const REACTION_PORTLET_ID = "reaction-toggle";
 const REACTION_HIDE_PORTLET_ID = "reaction-hide-toggle";
+const REACTION_BLACKLIST_PORTLET_ID = "reaction-blacklist-toggle";
 const HIDE_CLASS = "reaction-hidden";
 let hideStylesInjected = false;
+
+function isHiddenMode(): boolean {
+	return state.reactionHidden || state.reactionBlacklist;
+}
+
+function isEnabledMode(): boolean {
+	return state.reactionEnabled && !isHiddenMode();
+}
 
 /**
  * Add or update a portlet link in the actions menu (fallback to toolbox).
@@ -96,6 +106,7 @@ export function setReactionHiddenState(hidden: boolean): void {
 export function removeLegacyReactionPortlets(): void {
 	document.getElementById(REACTION_PORTLET_ID)?.remove();
 	document.getElementById(REACTION_HIDE_PORTLET_ID)?.remove();
+	document.getElementById(REACTION_BLACKLIST_PORTLET_ID)?.remove();
 }
 
 /**
@@ -121,12 +132,14 @@ function placeHidePortletAfterToggle(): void {
  * Update the reaction toggle portlet link based on the current state.
  */
 function updateReactionPortlet(): void {
-	const label = state.reactionEnabled
+	const label = isEnabledMode()
 		? t("dom.portlets.disable_reaction")
 		: t("dom.portlets.enable_reaction");
 	addPortletTrigger(REACTION_PORTLET_ID, label, () => {
-		const nextEnabled = !state.reactionEnabled;
+		const nextEnabled = !isEnabledMode();
 		if (nextEnabled) {
+			setReactionBlacklist(false);
+			persistReactionBlacklistToUserConfig(false);
 			setReactionHidden(false);
 			setReactionHiddenState(false);
 		}
@@ -139,17 +152,17 @@ function updateReactionPortlet(): void {
  * Update the hide reactions portlet link based on the current state.
  */
 function updateHidePortlet(): void {
-	if (state.reactionEnabled) {
+	if (isEnabledMode()) {
 		document.getElementById(REACTION_HIDE_PORTLET_ID)?.remove();
 		setReactionHidden(false);
 		setReactionHiddenState(false);
 		return;
 	}
-	const label = state.reactionHidden
+	const label = isHiddenMode()
 		? t("dom.portlets.unhide_reactions")
 		: t("dom.portlets.hide_reactions");
 	addPortletTrigger(REACTION_HIDE_PORTLET_ID, label, () => {
-		if (!state.reactionHidden) {
+		if (!isHiddenMode()) {
 			OO.ui.confirm(t("dom.confirm.hide_reactions"), {
 				title: t("default.titles.confirm"),
 				size: "small",
@@ -162,12 +175,49 @@ function updateHidePortlet(): void {
 			});
 			return;
 		}
+		setReactionBlacklist(false);
+		persistReactionBlacklistToUserConfig(false);
 		setReactionHidden(false);
 		setReactionHiddenState(false);
 		updateLegacyReactionPortlets();
 	});
 	placeHidePortletAfterToggle();
-	setReactionHiddenState(state.reactionHidden);
+	setReactionHiddenState(isHiddenMode());
+}
+
+/**
+ * Update the "do not receive reactions" legacy portlet link.
+ */
+function updateBlacklistPortlet(): void {
+	if (isEnabledMode() || !isHiddenMode()) {
+		document.getElementById(REACTION_BLACKLIST_PORTLET_ID)?.remove();
+		return;
+	}
+	const status = state.reactionBlacklist ? "[x]" : "[ ]";
+	const label = `${status} ${t("dom.portlets.blacklist_reactions")}`;
+	addPortletTrigger(REACTION_BLACKLIST_PORTLET_ID, label, () => {
+		const nextValue = !state.reactionBlacklist;
+		if (nextValue) {
+			OO.ui.confirm(t("dom.confirm.blacklist_reactions"), {
+				title: t("default.titles.confirm"),
+				size: "small",
+			}).then((confirmed: boolean) => {
+				if (!confirmed) {
+					return;
+				}
+				setReactionBlacklist(true);
+				setReactionHidden(true);
+				setReactionHiddenState(true);
+				toggleReactionEnabled(false);
+				persistReactionBlacklistToUserConfig(true);
+				updateLegacyReactionPortlets();
+			});
+			return;
+		}
+		setReactionBlacklist(false);
+		persistReactionBlacklistToUserConfig(false);
+		updateLegacyReactionPortlets();
+	});
 }
 
 /**
@@ -176,4 +226,5 @@ function updateHidePortlet(): void {
 export function updateLegacyReactionPortlets(): void {
 	updateReactionPortlet();
 	updateHidePortlet();
+	updateBlacklistPortlet();
 }

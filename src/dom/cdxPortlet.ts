@@ -1,7 +1,8 @@
-import state, { setReactionHidden } from "../state";
+import state, { setReactionBlacklist, setReactionHidden } from "../state";
 import { toggleReactionEnabled } from "./buttons";
 import { removeLegacyReactionPortlets, setReactionHiddenState } from "./portlet";
 import { t } from "../i18n";
+import { persistReactionBlacklistToUserConfig } from "../api/userConfig";
 
 export type ReactionAppearanceChoice = "enable" | "disable" | "hide";
 
@@ -12,9 +13,11 @@ export interface ReactionAppearancePortletOptions {
 		enable: string;
 		disable: string;
 		hideAll: string;
+		blacklist: string;
 	};
 	selected: ReactionAppearanceChoice;
 	onChange: (value: ReactionAppearanceChoice) => void;
+	onBlacklistChange: (value: boolean) => void;
 }
 
 const DEFAULT_PORTLET_ID = "reaction-appearance-portlet";
@@ -138,6 +141,44 @@ function createRadio(
 }
 
 /**
+ * Create a checkbox element for the reaction appearance portlet.
+ * @param id - The id attribute for the checkbox input.
+ * @param label - The text label for the checkbox.
+ * @param checked - Whether the checkbox is checked.
+ * @returns An object containing the wrapper div and the input element.
+ */
+function createCheckbox(
+	id: string,
+	label: string,
+	checked: boolean,
+): { wrapper: HTMLDivElement; input: HTMLInputElement } {
+	const wrapper = document.createElement("div");
+	wrapper.className = "cdx-checkbox";
+
+	const input = document.createElement("input");
+	input.type = "checkbox";
+	input.id = id;
+	input.className = "cdx-checkbox__input";
+	input.checked = checked;
+
+	const icon = document.createElement("span");
+	icon.className = "cdx-checkbox__icon";
+
+	const labelEl = document.createElement("label");
+	labelEl.className = "cdx-label cdx-checkbox__label";
+	labelEl.htmlFor = id;
+
+	const labelText = document.createElement("span");
+	labelText.className = "cdx-label__label__text";
+	labelText.textContent = label;
+
+	labelEl.appendChild(labelText);
+	wrapper.append(input, icon, labelEl);
+
+	return { wrapper, input };
+}
+
+/**
  * Build the skeleton structure for the reaction appearance portlet.
  * @param portletId - The HTML id attribute for the portlet.
  * @param heading - The heading text for the portlet.
@@ -186,6 +227,15 @@ function shouldShowHideOption(selected: ReactionAppearanceChoice): boolean {
 }
 
 /**
+ * Determine whether to show the reaction blacklist option.
+ * @param selected - The currently selected reaction appearance choice.
+ * @returns True if the reaction blacklist option should be shown.
+ */
+function shouldShowBlacklistOption(selected: ReactionAppearanceChoice): boolean {
+	return selected === "hide";
+}
+
+/**
  * Add or update the reaction appearance portlet in the interface.
  * @param options - Configuration options for the portlet.
  */
@@ -219,12 +269,19 @@ export function upsertReactionAppearancePortlet(options: ReactionAppearancePortl
 		options.labels.hideAll,
 		options.selected === "hide",
 	);
+	const blacklistCheckbox = createCheckbox(
+		`${portletId}-blacklist`,
+		options.labels.blacklist,
+		state.reactionBlacklist,
+	);
 
 	const hideVisible = shouldShowHideOption(options.selected);
 	hideRadio.wrapper.style.display = hideVisible ? "" : "none";
+	blacklistCheckbox.wrapper.style.display = shouldShowBlacklistOption(options.selected) ? "" : "none";
 
 	const updateHideVisibility = (value: ReactionAppearanceChoice): void => {
 		hideRadio.wrapper.style.display = shouldShowHideOption(value) ? "" : "none";
+		blacklistCheckbox.wrapper.style.display = shouldShowBlacklistOption(value) ? "" : "none";
 	};
 
 	const handleChange = (value: ReactionAppearanceChoice): void => {
@@ -235,8 +292,25 @@ export function upsertReactionAppearancePortlet(options: ReactionAppearancePortl
 	enableRadio.input.addEventListener("change", () => handleChange("enable"));
 	disableRadio.input.addEventListener("change", () => handleChange("disable"));
 	hideRadio.input.addEventListener("change", () => handleChange("hide"));
+	blacklistCheckbox.input.addEventListener("change", () => {
+		const nextValue = blacklistCheckbox.input.checked;
+		if (nextValue) {
+			OO.ui.confirm(t("dom.confirm.blacklist_reactions"), {
+				title: t("default.titles.confirm"),
+				size: "small",
+			}).then((confirmed: boolean) => {
+				if (confirmed) {
+					options.onBlacklistChange(true);
+				} else {
+					blacklistCheckbox.input.checked = false;
+				}
+			});
+			return;
+		}
+		options.onBlacklistChange(false);
+	});
 
-	form.append(enableRadio.wrapper, disableRadio.wrapper, hideRadio.wrapper);
+	form.append(enableRadio.wrapper, disableRadio.wrapper, hideRadio.wrapper, blacklistCheckbox.wrapper);
 
 	const existing = document.getElementById(portletId);
 	if (existing && existing.parentNode) {
@@ -251,11 +325,11 @@ export function upsertReactionAppearancePortlet(options: ReactionAppearancePortl
  * @returns The resolved ReactionAppearanceChoice.
  */
 function resolveAppearanceSelection(): ReactionAppearanceChoice {
+	if (state.reactionBlacklist || state.reactionHidden) {
+		return "hide";
+	}
 	if (state.reactionEnabled) {
 		return "enable";
-	}
-	if (state.reactionHidden) {
-		return "hide";
 	}
 	return "disable";
 }
@@ -275,10 +349,13 @@ export function updateAppearancePortlet(): void {
 			enable: t("dom.appearance.enable"),
 			disable: t("dom.appearance.disable"),
 			hideAll: t("dom.appearance.hide_all"),
+			blacklist: t("dom.appearance.blacklist"),
 		},
 		selected,
 		onChange: (value) => {
 			if (value === "enable") {
+				setReactionBlacklist(false);
+				persistReactionBlacklistToUserConfig(false);
 				setReactionHidden(false);
 				setReactionHiddenState(false);
 				toggleReactionEnabled(true);
@@ -286,6 +363,8 @@ export function updateAppearancePortlet(): void {
 				return;
 			}
 			if (value === "disable") {
+				setReactionBlacklist(false);
+				persistReactionBlacklistToUserConfig(false);
 				setReactionHidden(false);
 				setReactionHiddenState(false);
 				toggleReactionEnabled(false);
@@ -304,6 +383,16 @@ export function updateAppearancePortlet(): void {
 				updateAppearancePortlet();
 			});
 		},
+		onBlacklistChange: (value) => {
+			setReactionBlacklist(value);
+			persistReactionBlacklistToUserConfig(value);
+			if (value) {
+				setReactionHidden(true);
+				setReactionHiddenState(true);
+				toggleReactionEnabled(false);
+			}
+			updateAppearancePortlet();
+		},
 	});
-	setReactionHiddenState(state.reactionHidden);
+	setReactionHiddenState(state.reactionHidden || state.reactionBlacklist);
 }
