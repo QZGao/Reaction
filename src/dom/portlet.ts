@@ -1,7 +1,7 @@
 import state, { setReactionBlacklist, setReactionHidden } from "../state";
-import { toggleReactionEnabled } from "./buttons";
 import { t } from "../i18n";
 import { persistReactionBlacklistToUserConfig } from "../api/userConfig";
+import { toggleReactionEnabledWithFeature } from "../featureLoader";
 
 const REACTION_PORTLET_ID = "reaction-toggle";
 const REACTION_HIDE_PORTLET_ID = "reaction-hide-toggle";
@@ -143,7 +143,7 @@ function updateReactionPortlet(): void {
 			setReactionHidden(false);
 			setReactionHiddenState(false);
 		}
-		toggleReactionEnabled(nextEnabled);
+		toggleReactionEnabledWithFeature(nextEnabled);
 		updateLegacyReactionPortlets();
 	});
 }
@@ -208,7 +208,7 @@ function updateBlacklistPortlet(): void {
 				setReactionBlacklist(true);
 				setReactionHidden(true);
 				setReactionHiddenState(true);
-				toggleReactionEnabled(false);
+				toggleReactionEnabledWithFeature(false);
 				persistReactionBlacklistToUserConfig(true);
 				updateLegacyReactionPortlets();
 			});

@@ -1,8 +1,8 @@
 import state, { setReactionBlacklist, setReactionHidden } from "../state";
-import { toggleReactionEnabled } from "./buttons";
 import { removeLegacyReactionPortlets, setReactionHiddenState } from "./portlet";
 import { t } from "../i18n";
 import { persistReactionBlacklistToUserConfig } from "../api/userConfig";
+import { toggleReactionEnabledWithFeature } from "../featureLoader";
 
 export type ReactionAppearanceChoice = "enable" | "disable" | "hide";
 
@@ -358,7 +358,7 @@ export function updateAppearancePortlet(): void {
 				persistReactionBlacklistToUserConfig(false);
 				setReactionHidden(false);
 				setReactionHiddenState(false);
-				toggleReactionEnabled(true);
+				toggleReactionEnabledWithFeature(true);
 				updateAppearancePortlet();
 				return;
 			}
@@ -367,7 +367,7 @@ export function updateAppearancePortlet(): void {
 				persistReactionBlacklistToUserConfig(false);
 				setReactionHidden(false);
 				setReactionHiddenState(false);
-				toggleReactionEnabled(false);
+				toggleReactionEnabledWithFeature(false);
 				updateAppearancePortlet();
 				return;
 			}
@@ -378,7 +378,7 @@ export function updateAppearancePortlet(): void {
 				if (confirmed) {
 					setReactionHidden(true);
 					setReactionHiddenState(true);
-					toggleReactionEnabled(false);
+					toggleReactionEnabledWithFeature(false);
 				}
 				updateAppearancePortlet();
 			});
@@ -389,7 +389,7 @@ export function updateAppearancePortlet(): void {
 			if (value) {
 				setReactionHidden(true);
 				setReactionHiddenState(true);
-				toggleReactionEnabled(false);
+				toggleReactionEnabledWithFeature(false);
 			}
 			updateAppearancePortlet();
 		},

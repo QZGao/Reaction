@@ -118,10 +118,10 @@ function getLocaleBundleContents(locale, messages, emojiData) {
 })();`;
 }
 
-const createBuildOptions = ({ outfile, locales, emojiLocales }) => {
+const createBuildOptions = ({ entryPoint, outfile, locales, emojiLocales, bundleLabel }) => {
 	const timestamp = new Date().toISOString();
 	return {
-		entryPoints: [path.join(projectRoot, 'src', 'main.ts')],
+		entryPoints: [entryPoint],
 		outfile,
 		bundle: true,
 		format: 'iife',
@@ -144,7 +144,7 @@ const createBuildOptions = ({ outfile, locales, emojiLocales }) => {
 			'.css': 'text'
 		},
 		banner: {
-			js: `// Reaction - Main Bundle
+			js: `// Reaction - ${bundleLabel}
 // Maintainers: SuperGrey, SunAfterRain
 // Repository: https://github.com/QZGao/Reaction
 // Release: ${pkgJson.version}
@@ -213,11 +213,21 @@ async function buildLocaleBundles({ outputDir, locales, emojiLocales, minify }) 
 
 		const outputDir = debug || watch ? debugDir : distDir;
 		const baseOutFile = path.join(outputDir, 'Gadget-Reaction.js');
+		const featureOutFile = path.join(outputDir, 'Gadget-Reaction-feature.js');
 		const buildTargets = [
 			{
+				entryPoint: path.join(projectRoot, 'src', 'main.ts'),
 				outfile: baseOutFile,
 				locales: ['en'],
 				emojiLocales: [],
+				bundleLabel: 'Shell Bundle',
+			},
+			{
+				entryPoint: path.join(projectRoot, 'src', 'featureEntry.ts'),
+				outfile: featureOutFile,
+				locales: i18nLocales,
+				emojiLocales,
+				bundleLabel: 'Feature Bundle',
 			},
 		];
 

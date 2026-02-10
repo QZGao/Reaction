@@ -1,8 +1,8 @@
-import { addReactionButtons } from "./dom/buttons";
 import { fetchPageProperties, doesPageExist } from "./api/client";
 import { isVector2022Appearance, updateAppearancePortlet } from "./dom/cdxPortlet";
 import { updateLegacyReactionPortlets } from "./dom/portlet";
 import { syncCurrentUserBlacklistFromUserConfig } from "./api/userConfig";
+import { bootstrapFeatureForCurrentState } from "./featureLoader";
 
 const PAGE_NAME_WHITELIST: string[] = [
 	"Wikipedia:新条目推荐/候选",
@@ -114,24 +114,7 @@ async function init() {
 	} else {
 		updateLegacyReactionPortlets();
 	}
-	mw.loader.load("/w/index.php?title=Template:Reaction/styles.css&action=raw&ctype=text/css", "text/css");
-	try {
-		await mw.loader.using("ext.discussionTools.init");
-	} catch (error) {
-		console.error("[Reaction] Failed to load DiscussionTools module.", error);
-		return;
-	}
-	mw.hook("wikipage.content").add(function (container) {
-		const roots = container?.get ? container.get() : undefined;
-		setTimeout(() => {
-			void addReactionButtons(roots && roots.length > 0 ? roots : undefined);
-		}, 200);
-	});
-
-	// Fallback for cases where the hook fires before this gadget loads.
-	setTimeout(() => {
-		void addReactionButtons(document);
-	}, 0);
+	bootstrapFeatureForCurrentState();
 }
 
 const globalState = globalThis as typeof globalThis & {
