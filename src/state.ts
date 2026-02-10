@@ -2,6 +2,50 @@ import pkg from "../package.json";
 
 const REACTION_STORAGE_KEY = "reaction.enabled";
 const REACTION_HIDE_STORAGE_KEY = "reaction.hidden";
+const REACTION_BLACKLIST_STORAGE_KEY = "reaction.blacklist";
+
+/**
+ * Check whether a value is a plain object record.
+ * @param value - Value to check.
+ * @returns True when value is a non-null object.
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+/**
+ * Read blacklist config from global `ujsReactionConfig` safely.
+ * @returns Blacklist flag from global config, or null when unavailable.
+ */
+function readGlobalBlacklistConfig(): boolean | null {
+	if (typeof window === "undefined") {
+		return null;
+	}
+	const globalObject = window as unknown as Record<string, unknown>;
+	const rawConfig = globalObject["ujsReactionConfig"];
+	if (!isRecord(rawConfig)) {
+		return null;
+	}
+	const rawBlacklist = rawConfig["blacklist"];
+	return typeof rawBlacklist === "boolean" ? rawBlacklist : null;
+}
+
+/**
+ * Write blacklist config to global `ujsReactionConfig` safely.
+ * @param blacklisted - Whether reactions are blacklisted.
+ */
+function writeGlobalBlacklistConfig(blacklisted: boolean): void {
+	if (typeof window === "undefined") {
+		return;
+	}
+	const globalObject = window as unknown as Record<string, unknown>;
+	const rawConfig = globalObject["ujsReactionConfig"];
+	const baseConfig = isRecord(rawConfig) ? rawConfig : {};
+	globalObject["ujsReactionConfig"] = {
+		...baseConfig,
+		blacklist: blacklisted,
+	};
+}
 
 /**
  * Load the reaction modification enabled state from localStorage.
@@ -36,6 +80,32 @@ function loadReactionHidden(): boolean {
 }
 
 /**
+ * Load the reaction blacklist state from localStorage or global config.
+ * Global config takes precedence and is synced back to localStorage.
+ * @returns Whether reactions from others are blacklisted.
+ */
+function loadReactionBlacklist(): boolean {
+	const configured = readGlobalBlacklistConfig();
+	if (configured !== null) {
+		if ("localStorage" in window) {
+			window.localStorage.setItem(REACTION_BLACKLIST_STORAGE_KEY, String(configured));
+		}
+		return configured;
+	}
+	if (typeof window === "undefined") {
+		return false;
+	}
+	if (!("localStorage" in window)) {
+		return false;
+	}
+	const stored = window.localStorage.getItem(REACTION_BLACKLIST_STORAGE_KEY);
+	if (stored == null) {
+		return false;
+	}
+	return stored === "true";
+}
+
+/**
  * Persist the reaction modification enabled state to localStorage.
  * @param enabled - Whether reaction modifications are enabled.
  */
@@ -55,6 +125,20 @@ function persistReactionHidden(hidden: boolean): void {
 		return;
 	}
 	window.localStorage.setItem(REACTION_HIDE_STORAGE_KEY, String(hidden));
+}
+
+/**
+ * Persist the reaction blacklist state to localStorage and global config object.
+ * @param blacklisted - Whether reactions from others are blacklisted.
+ */
+function persistReactionBlacklist(blacklisted: boolean): void {
+	if (typeof window === "undefined") {
+		return;
+	}
+	if ("localStorage" in window) {
+		window.localStorage.setItem(REACTION_BLACKLIST_STORAGE_KEY, String(blacklisted));
+	}
+	writeGlobalBlacklistConfig(blacklisted);
 }
 
 /**
@@ -89,6 +173,11 @@ class State {
 	 * Whether reactions are hidden for this session.
 	 */
 	reactionHidden: boolean = loadReactionHidden();
+
+	/**
+	 * Whether receiving reactions from others is disabled.
+	 */
+	reactionBlacklist: boolean = loadReactionBlacklist();
 }
 
 export const state = new State();
@@ -118,4 +207,13 @@ export function setReactionEnabled(enabled: boolean): void {
 export function setReactionHidden(hidden: boolean): void {
 	state.reactionHidden = hidden;
 	persistReactionHidden(hidden);
+}
+
+/**
+ * Set whether receiving reactions from others is disabled.
+ * @param blacklisted - Whether reactions are blacklisted.
+ */
+export function setReactionBlacklist(blacklisted: boolean): void {
+	state.reactionBlacklist = blacklisted;
+	persistReactionBlacklist(blacklisted);
 }

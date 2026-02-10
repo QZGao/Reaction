@@ -15,9 +15,11 @@
 	"dom.appearance.enable": "啟用",
 	"dom.appearance.disable": "停用",
 	"dom.appearance.hide_all": "隱藏全部",
+	"dom.appearance.blacklist": "不要向我發送「反應」",
 	"dom.confirm.add": "確定要追加這個「反應」嗎？",
 	"dom.confirm.remove": "確定要取消這個「反應」嗎？",
 	"dom.confirm.hide_reactions": "要隱藏所有「反應」嗎？",
+	"dom.confirm.blacklist_reactions": "確定不要向我發送「反應」嗎？",
 	"dom.errors.duplicate_reaction": "失敗！不能重複做出「反應」。",
 	"dom.errors.input_empty": "「反應」內容不能為空！",
 	"dom.errors.missing_timestamp": "失敗！無法獲取時間戳。",
@@ -26,6 +28,7 @@
 	"dom.portlets.disable_reaction": "停用「反應」",
 	"dom.portlets.enable_reaction": "啟用「反應」",
 	"dom.portlets.hide_reactions": "隱藏所有「反應」",
+	"dom.portlets.blacklist_reactions": "不要向我發送「反應」",
 	"dom.portlets.unhide_reactions": "取消隱藏「反應」",
 	"dom.reactions.comment_stamp": "$1於$2",
 	"dom.reactions.label": "反應",
@@ -59,5 +62,6 @@
 	"emojiPicker.i18n.categories.symbols": "符號",
 	"emojiPicker.i18n.categories.flags": "旗幟",
 	"emojiPicker.i18n.categories.custom": "自訂",
-	"emojiPicker.notice.reaction_visibility": "部分使用者可能隱藏了「反應」。"
+	"emojiPicker.notice.reaction_visibility": "部分使用者可能隱藏了「反應」。",
+	"emojiPicker.notice.reaction_blacklisted": "此使用者禁止他人對其做出「反應」。"
 }

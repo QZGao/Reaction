@@ -92,6 +92,7 @@ interface PickerSearchSlotProps {
 
 let pickerApp: PickerAppHandle | null = null;
 let pickerContainer: HTMLDivElement | null = null;
+let pickerNoticeElement: HTMLDivElement | null = null;
 let currentAnchor: HTMLElement | null = null;
 let currentInput: HTMLInputElement | null = null;
 let emojiIndex: EmojiIndexType | null = null;
@@ -340,6 +341,7 @@ function destroyPicker(): void {
 		pickerContainer.remove();
 		pickerContainer = null;
 	}
+	pickerNoticeElement = null;
 	currentAnchor = null;
 	currentInput = null;
 	detachViewportListeners();
@@ -631,6 +633,7 @@ async function mountPicker(anchor: HTMLElement, input: HTMLInputElement): Promis
 	const notice = document.createElement("div");
 	notice.className = `${PICKER_CLASS}__notice`;
 	notice.textContent = t(REACTION_VISIBILITY_NOTICE_KEY);
+	pickerNoticeElement = notice;
 	pickerContainer.appendChild(notice);
 	await compatNextTick(() => undefined);
 	updatePickerPosition(anchor, pickerContainer);
@@ -645,6 +648,26 @@ async function mountPicker(anchor: HTMLElement, input: HTMLInputElement): Promis
  */
 export async function showEmojiPicker(anchor: HTMLElement, input: HTMLInputElement): Promise<void> {
 	await mountPicker(anchor, input);
+}
+
+/**
+ * Update the notice text shown on the currently open emoji picker.
+ * @param text - Notice text.
+ */
+export function setEmojiPickerNotice(text: string): void {
+	if (!pickerNoticeElement) {
+		return;
+	}
+	pickerNoticeElement.textContent = text;
+}
+
+/**
+ * Check whether the emoji picker is currently open for a specific anchor.
+ * @param anchor - Anchor element.
+ * @returns True if open for the anchor.
+ */
+export function isEmojiPickerShownFor(anchor: HTMLElement): boolean {
+	return Boolean(pickerContainer && currentAnchor === anchor);
 }
 
 /**
