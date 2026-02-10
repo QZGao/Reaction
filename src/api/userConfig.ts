@@ -1,7 +1,7 @@
 import state, { setReactionBlacklist } from "../state";
 import { fetchPageWikitext, getApi } from "./client";
 import { t, tReaction } from "../i18n";
-import { normalizeTitle } from "../utils";
+import { normalizeTitle } from "../titleUtils";
 
 const REACTION_CONFIG_VAR = "ujsReactionConfig";
 const REACTION_BLACKLIST_SESSION_STORAGE_KEY = "reaction.blacklistByUser";

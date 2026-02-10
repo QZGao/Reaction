@@ -225,8 +225,8 @@ async function buildLocaleBundles({ outputDir, locales, emojiLocales, minify }) 
 			{
 				entryPoint: path.join(projectRoot, 'src', 'featureEntry.ts'),
 				outfile: featureOutFile,
-				locales: i18nLocales,
-				emojiLocales,
+				locales: [],
+				emojiLocales: [],
 				bundleLabel: 'Feature Bundle',
 			},
 		];
