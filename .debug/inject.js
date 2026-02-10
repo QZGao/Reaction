@@ -2,7 +2,7 @@
 (function () {
 	const baseBundleUrl = browser.runtime.getURL('Gadget-Reaction.js');
 	const bundlePrefix = baseBundleUrl.replace(/Gadget-Reaction\.js$/, '');
-	const SCRIPT_ID = 'reaction-debug-userscript';
+	const SCRIPT_ID_PREFIX = 'reaction-debug-userscript';
 	const DEV_STORAGE_KEY = 'reaction-dev';
 
 	function markDevMode() {
@@ -18,13 +18,19 @@
 		const waitScript = document.createElement('script');
 		waitScript.textContent = `
 			(function() {
+				function getScriptId(url) {
+					var name = (url.split('/').pop() || 'bundle').replace(/[^a-z0-9_-]/gi, '-').toLowerCase();
+					return ${JSON.stringify(SCRIPT_ID_PREFIX)} + '-' + name;
+				}
+
 				function loadReactionWithUrl(url, onError) {
-					// Remove any previously injected copy (prevents double-injection)
-					var old = document.getElementById(${JSON.stringify(SCRIPT_ID)});
+					// Replace only the same target script, so base + locale can coexist.
+					var scriptId = getScriptId(url);
+					var old = document.getElementById(scriptId);
 					if (old) old.remove();
 
 					var script = document.createElement('script');
-					script.id = ${JSON.stringify(SCRIPT_ID)};
+					script.id = scriptId;
 
 					// Cache-bust so Firefox won’t reuse an old bundle
 					script.src = url + '?t=' + Date.now();
@@ -63,6 +69,7 @@
 				function tryLoadLocaleBundles() {
 					var locales = collectLocaleCandidates();
 					var index = 0;
+					var featureUrl = ${JSON.stringify(bundlePrefix)} + 'Gadget-Reaction-feature.js';
 
 					function loadLocaleBundle() {
 						if (index >= locales.length) {
@@ -76,6 +83,7 @@
 					}
 
 					loadReactionWithUrl(${JSON.stringify(baseBundleUrl)});
+					loadReactionWithUrl(featureUrl);
 					loadLocaleBundle();
 				}
 
