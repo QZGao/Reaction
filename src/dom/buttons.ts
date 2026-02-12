@@ -1,6 +1,6 @@
 import state, { canReact, setReactionEnabled } from "../state";
 import { getCurrentSignatureTimestamp, parseTimestamp, normalizeTitle } from "../utils";
-import { modifyPage, type ModifyPageRequest } from "../api/modifyPage";
+import { modifyReactionInDatabase, type ModifyReactionRequest } from "../api/reactionDatabase";
 import { t, tReaction } from "../i18n";
 import {
 	getReactionCommentors,
@@ -21,6 +21,9 @@ import {
 } from "../api/discussionTools";
 import { resolveReactionBlacklistForUser } from "../api/userConfig";
 import { showEmojiPicker, hideEmojiPicker, setEmojiPickerNotice, isEmojiPickerShownFor } from "./emojiPicker";
+import { getReactionEntryForComment, hasReactionEntryData } from "../reactionData/store";
+import { renderReactionEntryButtons } from "../reactionData/render";
+import { runLegacyInlineMigrationOnce } from "../migration/legacyInlineMigration";
 
 /**
  * Registry for reaction event handlers. WeakMap stores handler references so they can be removed later.
@@ -48,7 +51,13 @@ const COMMENT_METADATA_ATTRIBUTES = [
 	"data-reaction-comment-author",
 	"data-reaction-comment-timestamp",
 ] as const;
+const COMMENT_STATUS_ATTRIBUTES = [
+	"data-reaction-db-readonly",
+	"data-reaction-db-readonly-reason",
+] as const;
 const REACTION_BLACKLISTED_NOTICE_KEY = "emojiPicker.notice.reaction_blacklisted";
+const REACTION_DB_READONLY_NOTICE = "[Reaction] Reaction database for this comment is read-only.";
+let hydrationRunToken = 0;
 
 interface StoredCommentMetadata {
 	commentId?: string | null;
@@ -90,6 +99,14 @@ function copyCommentMetadata(source: HTMLElement | null | undefined, target: HTM
 		const value = source.getAttribute(attr);
 		if (value) {
 			target.setAttribute(attr, value);
+		}
+	}
+	for (const attr of COMMENT_STATUS_ATTRIBUTES) {
+		const value = source.getAttribute(attr);
+		if (value) {
+			target.setAttribute(attr, value);
+		} else {
+			target.removeAttribute(attr);
 		}
 	}
 }
@@ -548,6 +565,75 @@ function getCommentContext(button: HTMLElement): CommentContext | null {
 }
 
 /**
+ * Apply read-only attributes to a reaction element.
+ * @param element - Reaction or timestamp element.
+ * @param readOnly - Whether mutation is read-only.
+ * @param reason - Optional read-only reason code.
+ */
+function applyReadOnlyAttributes(
+	element: HTMLElement,
+	readOnly: boolean,
+	reason?: string,
+): void {
+	if (readOnly) {
+		element.setAttribute("data-reaction-db-readonly", "1");
+		if (reason) {
+			element.setAttribute("data-reaction-db-readonly-reason", reason);
+		}
+		return;
+	}
+	element.removeAttribute("data-reaction-db-readonly");
+	element.removeAttribute("data-reaction-db-readonly-reason");
+}
+
+/**
+ * Set read-only state for a timestamp and its mapped reaction buttons.
+ * @param timestampElement - Timestamp element.
+ * @param readOnly - Whether read-only is active.
+ * @param reason - Optional reason.
+ */
+function setCommentReadOnlyState(
+	timestampElement: HTMLElement | null,
+	readOnly: boolean,
+	reason?: string,
+): void {
+	if (!timestampElement) {
+		return;
+	}
+	applyReadOnlyAttributes(timestampElement, readOnly, reason);
+	const buttons = Array.from(document.querySelectorAll<HTMLElement>(".template-reaction"));
+	for (const button of buttons) {
+		if (_buttonTimestamps.get(button) !== timestampElement) {
+			continue;
+		}
+		applyReadOnlyAttributes(button, readOnly, reason);
+	}
+}
+
+/**
+ * Determine whether a reaction button is currently marked read-only.
+ * @param button - Reaction button element.
+ * @returns True when the comment database entry is read-only.
+ */
+function isCommentReadOnly(button: HTMLElement): boolean {
+	if (button.getAttribute("data-reaction-db-readonly") === "1") {
+		return true;
+	}
+	const timestampElement = _buttonTimestamps.get(button);
+	return timestampElement?.getAttribute("data-reaction-db-readonly") === "1";
+}
+
+/**
+ * Mark the button's comment as read-only.
+ * @param button - Reaction button element.
+ * @param reason - Optional reason.
+ */
+function markCommentReadOnlyFromButton(button: HTMLElement, reason?: string): void {
+	const timestampElement = _buttonTimestamps.get(button) ?? null;
+	setCommentReadOnlyState(timestampElement, true, reason);
+}
+
+/**
  * Resolve whether the target comment author disallows reactions.
  * @param button - Reaction button element.
  * @returns Promise resolving to true when reactions are blocked by target config.
@@ -575,6 +661,10 @@ function handleReactionClick(button: HTMLElement): void {
  */
 async function handleReactionClickAsync(button: HTMLElement): Promise<void> {
 	if (!canReact()) {
+		return;
+	}
+	if (isCommentReadOnly(button)) {
+		mw.notify(REACTION_DB_READONLY_NOTICE, { title: t("default.titles.error"), type: "error" });
 		return;
 	}
 	if (button.classList.contains("reaction-new")) {
@@ -640,15 +730,18 @@ function toggleReaction(button: HTMLElement) {
 			return;
 		}
 
-		const mod: ModifyPageRequest = { timestamp, author, commentId, commentName, commentAuthor, commentTimestamp };
+		const mod: ModifyReactionRequest = { timestamp, author, commentId, commentName, commentAuthor, commentTimestamp };
 		if (count > 1) {
 			mod.downvote = reactionLabel;
 		} else {
 			mod.remove = reactionLabel;
 		}
 
-		void modifyPage(mod).then((response) => {
-			if (!response) {
+		void modifyReactionInDatabase(mod).then((result) => {
+			if (!result.success) {
+				if (result.readOnly) {
+					markCommentReadOnlyFromButton(button, result.reason);
+				}
 				return;
 			}
 			button.classList.remove("reaction-reacted");
@@ -669,10 +762,13 @@ function toggleReaction(button: HTMLElement) {
 			console.log("[Reaction] Should not happen! " + state.userName + " should not be in " + button.getAttribute("data-reaction-commentors"));
 			return;
 		}
-		const mod: ModifyPageRequest = { timestamp, author, upvote: reactionLabel, commentId, commentName, commentAuthor, commentTimestamp };
+		const mod: ModifyReactionRequest = { timestamp, author, upvote: reactionLabel, commentId, commentName, commentAuthor, commentTimestamp };
 
-		void modifyPage(mod).then((response) => {
-			if (!response) {
+		void modifyReactionInDatabase(mod).then((result) => {
+			if (!result.success) {
+				if (result.readOnly) {
+					markCommentReadOnlyFromButton(button, result.reason);
+				}
 				return;
 			}
 			button.classList.add("reaction-reacted");
@@ -766,7 +862,7 @@ async function saveNewReactionAsync(button: HTMLElement): Promise<void> {
 		return;
 	}
 	const timestampElement = _buttonTimestamps.get(button) ?? null;
-	const mod: ModifyPageRequest = {
+	const mod: ModifyReactionRequest = {
 		timestamp: context.timestamp,
 		author: context.author,
 		commentId: context.commentId ?? null,
@@ -775,8 +871,8 @@ async function saveNewReactionAsync(button: HTMLElement): Promise<void> {
 		commentTimestamp: context.commentTimestamp ?? null,
 		append: input.value.trim(),
 	};
-	void modifyPage(mod).then((response) => {
-		if (response) {
+	void modifyReactionInDatabase(mod).then((result) => {
+		if (result.success) {
 			hideEmojiPicker(button);
 			// Change the icon to the new reaction
 			button.classList.remove("reaction-new");
@@ -813,6 +909,8 @@ async function saveNewReactionAsync(button: HTMLElement): Promise<void> {
 			_handlerRegistry.set(button, buttonClickHandler);
 			button.addEventListener("click", buttonClickHandler);
 			attachReactionTooltip(button);
+		} else if (result.readOnly) {
+			markCommentReadOnlyFromButton(button, result.reason);
 		}
 	});
 }
@@ -989,7 +1087,108 @@ function bindEvent2ReactionButton(button: HTMLElement) {
 	}
 }
 
+interface ReactionHydrationTarget {
+	timestamp: HTMLElement;
+	anchor: HTMLElement;
+}
+
+interface ProcessReactionRootResult {
+	insertedButtons: number;
+	hydrationTargets: ReactionHydrationTarget[];
+}
+
 type ReactionRoot = Document | DocumentFragment | Element;
+
+/**
+ * Collect reaction buttons between a timestamp and anchor element.
+ * @param timestamp - Timestamp element.
+ * @param anchor - Anchor element (reply/menu wrapper).
+ * @returns Reaction buttons in visual order.
+ */
+function collectReactionButtonsBetween(timestamp: HTMLElement, anchor: HTMLElement): HTMLElement[] {
+	const buttons: HTMLElement[] = [];
+	let cursor = timestamp.nextElementSibling as HTMLElement | null;
+	while (cursor && cursor !== anchor) {
+		if (cursor.classList.contains("template-reaction")) {
+			buttons.push(cursor);
+		}
+		cursor = cursor.nextElementSibling as HTMLElement | null;
+	}
+	return buttons;
+}
+
+/**
+ * Resolve insertion point so rendered reactions appear before the "new reaction" button.
+ * @param anchor - Anchor element (reply/menu wrapper).
+ * @returns Element before which rendered buttons should be inserted.
+ */
+function resolveReactionInsertAnchor(anchor: HTMLElement): HTMLElement {
+	const previous = anchor.previousElementSibling as HTMLElement | null;
+	if (previous?.classList.contains("reaction-new")) {
+		return previous;
+	}
+	return anchor;
+}
+
+/**
+ * Hydrate one comment's reactions from centralized storage.
+ * @param target - Hydration target.
+ * @param runToken - Active run token to cancel stale work.
+ */
+async function hydrateTargetFromDatabase(
+	target: ReactionHydrationTarget,
+	runToken: number,
+): Promise<void> {
+	if (runToken !== hydrationRunToken) {
+		return;
+	}
+	const { timestamp, anchor } = target;
+	if (!timestamp.isConnected || !anchor.isConnected) {
+		return;
+	}
+	const commentId = timestamp.getAttribute("data-reaction-comment-id");
+	if (!commentId) {
+		return;
+	}
+
+	const result = await getReactionEntryForComment(commentId);
+	if (runToken !== hydrationRunToken) {
+		return;
+	}
+	setCommentReadOnlyState(timestamp, result.readOnly, result.reason);
+	if (!result.entry || !hasReactionEntryData(result.entry)) {
+		return;
+	}
+
+	let renderedButtons: HTMLElement[];
+	try {
+		renderedButtons = await renderReactionEntryButtons(result.entry);
+	} catch (error) {
+		console.error("[Reaction] Failed to render reactions from database.", commentId, error);
+		return;
+	}
+	if (runToken !== hydrationRunToken) {
+		return;
+	}
+	if (!anchor.parentNode) {
+		return;
+	}
+
+	const existingButtons = collectReactionButtonsBetween(timestamp, anchor)
+		.filter((button) => !button.classList.contains("reaction-new"));
+	for (const button of existingButtons) {
+		removeRegisteredHandler(button);
+		button.remove();
+	}
+
+	const insertionAnchor = resolveReactionInsertAnchor(anchor);
+	for (const button of renderedButtons) {
+		anchor.parentNode.insertBefore(button, insertionAnchor);
+		_buttonTimestamps.set(button, timestamp);
+		copyCommentMetadata(timestamp, button);
+		bindEvent2ReactionButton(button);
+	}
+}
 
 /**
  * Process a reaction root element to bind reaction buttons and add "new reaction" controls.
@@ -997,17 +1196,18 @@ type ReactionRoot = Document | DocumentFragment | Element;
  * @param matchingState {DiscussionToolsMatchingState | null} - Optional matching state from DiscussionTools.
  * @param lookup {DiscussionToolsLookup | null} - Optional lookup data from DiscussionTools.
  * @param useDomAnchors {boolean} - Whether to use DOM anchors for comment metadata assignment.
- * @returns {number} - Number of "new reaction" buttons inserted.
+ * @returns {ProcessReactionRootResult} - Inserted count and hydration targets.
  */
 function processReactionRoot(
 	root: ReactionRoot,
 	matchingState: DiscussionToolsMatchingState | null,
 	lookup: DiscussionToolsLookup | null,
 	useDomAnchors: boolean,
-): number {
+): ProcessReactionRootResult {
 	const timestamps = root.querySelectorAll<HTMLAnchorElement>("a.ext-discussiontools-init-timestamplink");
 	const replyButtons = root.querySelectorAll<HTMLSpanElement>("span.ext-discussiontools-init-replylink-buttons");
 	const pairCount = Math.min(timestamps.length, replyButtons.length);
+	const hydrationTargets: ReactionHydrationTarget[] = [];
 
 	// Find all reaction buttons between the timestamp and reply areas.
 	for (let i = 0; i < pairCount; i++) {
@@ -1040,13 +1240,24 @@ function processReactionRoot(
 		if (isInExcludedArea(replyButton) || isInExcludedArea(timestamp)) {
 			continue;
 		}
+		if (timestamp) {
+			hydrationTargets.push({
+				timestamp,
+				anchor: replyButton,
+			});
+		}
 		if (replyButton instanceof HTMLElement && insertNewReactionBefore(replyButton, timestamp)) {
 			insertedButtons++;
 		}
 	}
 
-	insertedButtons += processConvenientDiscussionMenus(root, matchingState, lookup ?? null, useDomAnchors);
-	return insertedButtons;
+	const convenientResult = processConvenientDiscussionMenus(root, matchingState, lookup ?? null, useDomAnchors);
+	insertedButtons += convenientResult.insertedButtons;
+	hydrationTargets.push(...convenientResult.hydrationTargets);
+	return {
+		insertedButtons,
+		hydrationTargets,
+	};
 }
 
 const PREVIEW_EXCLUDE_SELECTORS = [
@@ -1156,18 +1367,19 @@ function insertNewReactionBefore(target: HTMLElement, timestamp?: HTMLElement | 
  * @param matchingState {DiscussionToolsMatchingState | null} - Optional matching state from DiscussionTools.
  * @param lookup {DiscussionToolsLookup | null} - Optional lookup data from DiscussionTools.
  * @param useDomAnchors {boolean} - Whether to use DOM anchors for comment metadata assignment.
- * @returns {number} - Number of buttons inserted.
+ * @returns {ProcessReactionRootResult} - Inserted count and hydration targets.
  */
 function processConvenientDiscussionMenus(
 	root: ReactionRoot,
 	matchingState: DiscussionToolsMatchingState | null,
 	lookup: DiscussionToolsLookup | null,
 	useDomAnchors: boolean,
-): number {
+): ProcessReactionRootResult {
 	const commentParts = Array.from(root.querySelectorAll(".cd-comment-part")).filter(
 		(node): node is HTMLElement => node instanceof HTMLElement,
 	);
-	let inserted = 0;
+	let insertedButtons = 0;
+	const hydrationTargets: ReactionHydrationTarget[] = [];
 	for (const comment of commentParts) {
 		if (isInExcludedArea(comment)) {
 			continue;
@@ -1180,12 +1392,19 @@ function processConvenientDiscussionMenus(
 			comment.querySelector<HTMLElement>(TIMESTAMP_SELECTOR) ?? findTimestampWithinComment(comment);
 		if (timestamp) {
 			ensureTimestampMetadata(timestamp, matchingState, lookup, useDomAnchors);
+			hydrationTargets.push({
+				timestamp,
+				anchor: menuWrapper,
+			});
 		}
 		if (insertNewReactionBefore(menuWrapper, timestamp ?? null)) {
-			inserted++;
+			insertedButtons++;
 		}
 	}
-	return inserted;
+	return {
+		insertedButtons,
+		hydrationTargets,
+	};
 }
 
 /**
@@ -1206,16 +1425,45 @@ export async function addReactionButtons(containers?: ReactionRoot | ReactionRoo
 		roots.push(containers);
 	}
 
+	const includesDocumentRoot = roots.some((root) => root === document);
+	if (includesDocumentRoot) {
+		await runLegacyInlineMigrationOnce();
+	}
+
 	const lookup = await getDiscussionToolsLookup();
 	const useDomAnchors = Boolean(document.querySelector(COMMENT_MARKER_SELECTOR));
 	const matchingState = !useDomAnchors && lookup ? createMatchingState(lookup) : null;
+	const runToken = ++hydrationRunToken;
 
 	let totalInserted = 0;
 	for (const root of roots) {
+		if (runToken !== hydrationRunToken) {
+			return;
+		}
 		if (root instanceof Element && isInExcludedArea(root)) {
 			continue;
 		}
-		totalInserted += processReactionRoot(root, matchingState, lookup ?? null, useDomAnchors);
+		const processResult = processReactionRoot(root, matchingState, lookup ?? null, useDomAnchors);
+		totalInserted += processResult.insertedButtons;
+		const seenAnchors = new WeakSet<HTMLElement>();
+		const seenComments = new Set<string>();
+		for (const target of processResult.hydrationTargets) {
+			if (runToken !== hydrationRunToken) {
+				return;
+			}
+			const commentId = target.timestamp.getAttribute("data-reaction-comment-id") ?? "";
+			if (commentId && seenComments.has(commentId)) {
+				continue;
+			}
+			if (seenAnchors.has(target.anchor)) {
+				continue;
+			}
+			seenAnchors.add(target.anchor);
+			if (commentId) {
+				seenComments.add(commentId);
+			}
+			await hydrateTargetFromDatabase(target, runToken);
+		}
 		const reactionButtons = Array.from(root.querySelectorAll(".template-reaction[data-reaction-commentors]"));
 		for (const element of reactionButtons) {
 			if (!(element instanceof HTMLElement)) {
@@ -1239,6 +1487,9 @@ export async function addReactionButtons(containers?: ReactionRoot | ReactionRoo
 			bindEvent2ReactionButton(element);
 		}
 	}
+	if (runToken !== hydrationRunToken) {
+		return;
+	}
 	console.log(`[Reaction] Added ${totalInserted} new reaction buttons.`);
 }
 
@@ -1246,6 +1497,7 @@ export async function addReactionButtons(containers?: ReactionRoot | ReactionRoo
  * Disable all reaction modifications on the page.
  */
 function disableReaction(): void {
+	hydrationRunToken++;
 	hideEmojiPicker();
 	const buttons = Array.from(document.querySelectorAll<HTMLElement>(".template-reaction"));
 	for (const button of buttons) {

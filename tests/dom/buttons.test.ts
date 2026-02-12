@@ -57,6 +57,30 @@ vi.mock("../../src/dom/emojiPicker", () => ({
 	hideEmojiPicker: vi.fn(),
 }));
 
+vi.mock("../../src/migration/legacyInlineMigration", () => ({
+	runLegacyInlineMigrationOnce: vi.fn(async () => undefined),
+}));
+
+vi.mock("../../src/reactionData/store", () => ({
+	getReactionEntryForComment: vi.fn(async () => ({
+		title: "Wikipedia:Reactions/data/TestUser/202601",
+		entry: null,
+		readOnly: false,
+	})),
+	hasReactionEntryData: vi.fn((entry: unknown) => {
+		if (!entry || typeof entry !== "object") {
+			return false;
+		}
+		return Object.values(entry as Record<string, unknown>).some(
+			(value) => Array.isArray(value) && value.length > 0,
+		);
+	}),
+}));
+
+vi.mock("../../src/reactionData/render", () => ({
+	renderReactionEntryButtons: vi.fn(async () => []),
+}));
+
 describe("addReactionButtons", () => {
 	let addReactionButtons: typeof import("../../src/dom/buttons").addReactionButtons;
 
