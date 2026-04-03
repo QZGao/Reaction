@@ -1,12 +1,23 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import {
 	buildDatabaseTitle,
 	parseCommentIdForDatabase,
+	resolveProjectNamespacePrefix,
 	resolveDatabaseTitleFromCommentId,
 } from "../../src/reactionData/commentId";
 
 describe("reactionData/commentId", () => {
+	beforeEach(() => {
+		(globalThis as { mw?: unknown }).mw = {
+			config: {
+				get: (key: string) => key === "wgFormattedNamespaces"
+					? { 4: "Wikipedia" }
+					: undefined,
+			},
+		};
+	});
+
 	it("parses owner and month key from a standard comment id", () => {
 		const parsed = parseCommentIdForDatabase("c-SuperGrey-20260211013500-LuciferianThomas-20260211012700");
 		expect(parsed).not.toBeNull();
@@ -24,6 +35,19 @@ describe("reactionData/commentId", () => {
 		expect(buildDatabaseTitle(parsed)).toBe("Wikipedia:Reactions/data/Example_User/202601");
 	});
 
+	it("resolves local namespace-4 prefix when available", () => {
+		expect(resolveProjectNamespacePrefix()).toBe("Wikipedia");
+	});
+
+	it("falls back to Project namespace when mw namespace config is missing", () => {
+		(globalThis as { mw?: unknown }).mw = {
+			config: {
+				get: () => undefined,
+			},
+		};
+		expect(resolveProjectNamespacePrefix()).toBe("Project");
+	});
+
 	it("returns null for malformed comment ids", () => {
 		expect(parseCommentIdForDatabase("invalid-id")).toBeNull();
 		expect(resolveDatabaseTitleFromCommentId("c-User-no-timestamp")).toBeNull();
@@ -34,4 +58,3 @@ describe("reactionData/commentId", () => {
 		expect(title).toBe("Wikipedia:Reactions/data/SuperGrey/202602");
 	});
 });
-

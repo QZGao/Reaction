@@ -192,6 +192,11 @@ async function runLegacyInlineMigration(): Promise<void> {
 			},
 		);
 		if (!merged.ok && merged.reason !== "no_changes") {
+			console.warn(
+				"[Reaction] Legacy migration skipped comment due DB write failure.",
+				task.commentId,
+				merged.reason,
+			);
 			continue;
 		}
 		persistedRanges.push({ start: task.rangeStart, end: task.rangeEnd });
@@ -232,4 +237,3 @@ export function runLegacyInlineMigrationOnce(): Promise<void> {
 	}
 	return migrationPromise;
 }
-

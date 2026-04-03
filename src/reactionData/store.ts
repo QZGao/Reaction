@@ -7,13 +7,27 @@ import { normalizeTitle, parseSignatureTimestampText } from "../utils";
 import { resolveDatabaseTitleFromCommentId } from "./commentId";
 
 export const DATABASE_CACHE_TTL_MS = 60_000;
+export const DATABASE_PAGE_SOFT_LIMIT_BYTES = 180 * 1024;
 const SUPPORTED_SCHEMA_VERSION = 1;
+const SHARD_PREFIX = "part-";
+
+const ICON_MAX_LENGTH = 64;
+const USER_MAX_LENGTH = 255;
+const TIMESTAMP_MAX_LENGTH = 128;
+const TIMESTAMP_ISO_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+const SHARD_ID_PATTERN = /^part-\d+$/;
 
 const REACTION_READ_ONLY_SAVE_CODES = new Set([
 	"noedit",
 	"protectedpage",
 	"permissiondenied",
 	"abusefilter-disallowed",
+]);
+
+const RECOVER_AS_EMPTY_PARSE_REASONS = new Set([
+	"database_wrapper_invalid",
+	"database_json_invalid",
+	"database_shard_index_invalid",
 ]);
 
 type ReactionRecordMap = Record<string, ReactionParticipantRecord>;
@@ -32,9 +46,30 @@ interface DatabasePageParseSuccess {
 	payload: ReactionDatabasePayload;
 }
 
+interface ShardLayout {
+	shardEntries: Array<{ shardId: string; entries: Record<string, ReactionEntry> }>;
+	shardMap: Record<string, string>;
+}
+
+interface CombinedEntriesLoadSuccess {
+	ok: true;
+	title: string;
+	entries: Record<string, ReactionEntry>;
+}
+
+interface CombinedEntriesLoadFailure {
+	ok: false;
+	title: string;
+	reason: string;
+	readOnly: true;
+}
+
+type CombinedEntriesLoadResult = CombinedEntriesLoadSuccess | CombinedEntriesLoadFailure;
+
 export interface ReactionParticipantRecord {
 	user: string;
 	timestamp?: string;
+	timestampIso?: string;
 }
 
 export type ReactionEntry = Record<string, ReactionParticipantRecord[]>;
@@ -42,6 +77,9 @@ export type ReactionEntry = Record<string, ReactionParticipantRecord[]>;
 export interface ReactionDatabasePayload {
 	version: number;
 	entries: Record<string, ReactionEntry>;
+	sharded?: boolean;
+	shards?: string[];
+	shardMap?: Record<string, string>;
 }
 
 export interface ReactionDatabaseEntryResult {
@@ -57,6 +95,7 @@ export interface ReactionMutationRequest {
 	icon: string;
 	user: string;
 	timestamp?: string;
+	timestampIso?: string;
 	notifySuccess?: boolean;
 	notifyFailure?: boolean;
 }
@@ -97,6 +136,8 @@ interface UpdateEntryResult {
 export function clearReactionDatabaseCache(): void {
 	databaseCache.clear();
 	inFlightLoads.clear();
+	readOnlyReasons.clear();
+	malformedCommentIds.clear();
 }
 
 /**
@@ -131,7 +172,81 @@ function clearReadOnly(title: string): void {
  * @returns Trimmed icon or empty string.
  */
 function normalizeIcon(icon: string): string {
-	return icon.trim();
+	const trimmed = icon.trim();
+	if (!trimmed || trimmed.length > ICON_MAX_LENGTH) {
+		return "";
+	}
+	return trimmed;
+}
+
+/**
+ * Normalize and validate user text.
+ * @param user - Candidate user.
+ * @returns Normalized user name or empty string.
+ */
+function normalizeUser(user: string): string {
+	const normalized = normalizeTitle(user);
+	if (!normalized || normalized.length > USER_MAX_LENGTH) {
+		return "";
+	}
+	return normalized;
+}
+
+/**
+ * Normalize and validate timestamp display text.
+ * @param timestamp - Candidate timestamp.
+ * @returns Normalized timestamp or undefined.
+ */
+function normalizeTimestamp(timestamp?: string): string | undefined {
+	if (!timestamp) {
+		return undefined;
+	}
+	const trimmed = timestamp.trim();
+	if (!trimmed || trimmed.length > TIMESTAMP_MAX_LENGTH) {
+		return undefined;
+	}
+	return trimmed;
+}
+
+/**
+ * Normalize and validate timestamp ISO.
+ * @param timestampIso - Candidate ISO timestamp.
+ * @returns Normalized ISO timestamp or undefined.
+ */
+function normalizeTimestampIso(timestampIso?: string): string | undefined {
+	if (!timestampIso) {
+		return undefined;
+	}
+	const trimmed = timestampIso.trim();
+	if (!TIMESTAMP_ISO_PATTERN.test(trimmed)) {
+		return undefined;
+	}
+	return trimmed;
+}
+
+/**
+ * Convert Date to UTC second precision ISO string.
+ * @param date - Input date.
+ * @returns ISO string without milliseconds.
+ */
+function toIsoSeconds(date: Date): string {
+	return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+/**
+ * Derive ISO timestamp from signature text where possible.
+ * @param timestamp - Signature timestamp.
+ * @returns UTC ISO string or undefined.
+ */
+function deriveIsoFromSignatureTimestamp(timestamp?: string): string | undefined {
+	if (!timestamp) {
+		return undefined;
+	}
+	const parsed = parseSignatureTimestampText(timestamp);
+	if (!parsed) {
+		return undefined;
+	}
+	return toIsoSeconds(parsed);
 }
 
 /**
@@ -150,6 +265,43 @@ function toUserKey(user: string): string {
  */
 function hasTimestamp(timestamp?: string): boolean {
 	return Boolean(timestamp && timestamp.trim().length > 0);
+}
+
+/**
+ * Resolve comparable epoch millis for participant.
+ * @param participant - Participant record.
+ * @returns Epoch millis or null.
+ */
+function resolveParticipantEpoch(participant: ReactionParticipantRecord): number | null {
+	const iso = normalizeTimestampIso(participant.timestampIso);
+	if (iso) {
+		const parsedIso = new Date(iso);
+		if (!Number.isNaN(parsedIso.getTime())) {
+			return parsedIso.getTime();
+		}
+	}
+	const parsed = parseSignatureTimestampText(participant.timestamp ?? "");
+	return parsed ? parsed.getTime() : null;
+}
+
+/**
+ * Normalize participant record and derive canonical timestamp fields.
+ * @param participant - Input participant.
+ * @returns Normalized participant or null when invalid.
+ */
+function normalizeParticipant(participant: ReactionParticipantRecord): ReactionParticipantRecord | null {
+	const user = normalizeUser(participant.user);
+	if (!user) {
+		return null;
+	}
+	const timestamp = normalizeTimestamp(participant.timestamp);
+	const timestampIso = normalizeTimestampIso(participant.timestampIso)
+		?? deriveIsoFromSignatureTimestamp(timestamp);
+	return {
+		user,
+		timestamp,
+		timestampIso,
+	};
 }
 
 /**
@@ -174,15 +326,15 @@ function pickPreferredParticipant(
 		return current;
 	}
 
-	const currentParsed = parseSignatureTimestampText(current.timestamp ?? "");
-	const candidateParsed = parseSignatureTimestampText(candidate.timestamp ?? "");
-	if (currentParsed && candidateParsed) {
-		return candidateParsed.getTime() < currentParsed.getTime() ? candidate : current;
+	const currentEpoch = resolveParticipantEpoch(current);
+	const candidateEpoch = resolveParticipantEpoch(candidate);
+	if (currentEpoch !== null && candidateEpoch !== null) {
+		return candidateEpoch < currentEpoch ? candidate : current;
 	}
-	if (!currentParsed && candidateParsed) {
+	if (currentEpoch === null && candidateEpoch !== null) {
 		return candidate;
 	}
-	if (currentParsed && !candidateParsed) {
+	if (currentEpoch !== null && candidateEpoch === null) {
 		return current;
 	}
 
@@ -225,17 +377,17 @@ export function canonicalizeReactionEntry(entry: ReactionEntry): ReactionEntry {
 			if (!rawParticipant || typeof rawParticipant !== "object") {
 				return;
 			}
-			const user = typeof rawParticipant.user === "string" ? normalizeTitle(rawParticipant.user) : "";
-			if (!user) {
+			const normalized = normalizeParticipant({
+				user: typeof rawParticipant.user === "string" ? rawParticipant.user : "",
+				timestamp: typeof rawParticipant.timestamp === "string" ? rawParticipant.timestamp : undefined,
+				timestampIso: typeof rawParticipant.timestampIso === "string" ? rawParticipant.timestampIso : undefined,
+			});
+			if (!normalized) {
 				return;
 			}
-			const timestamp = hasTimestamp(rawParticipant.timestamp)
-				? rawParticipant.timestamp?.trim()
-				: undefined;
-			const key = toUserKey(user);
-			const candidate: ReactionParticipantRecord = { user, timestamp };
+			const key = toUserKey(normalized.user);
 			const existing = userMap[key];
-			userMap[key] = existing ? pickPreferredParticipant(existing, candidate) : candidate;
+			userMap[key] = existing ? pickPreferredParticipant(existing, normalized) : normalized;
 		});
 		if (Object.keys(userMap).length > 0) {
 			iconToUsers.set(icon, userMap);
@@ -254,6 +406,11 @@ export function canonicalizeReactionEntry(entry: ReactionEntry): ReactionEntry {
 				const userCompare = toUserKey(a.user).localeCompare(toUserKey(b.user));
 				if (userCompare !== 0) {
 					return userCompare;
+				}
+				const aIso = a.timestampIso ?? "";
+				const bIso = b.timestampIso ?? "";
+				if (aIso !== bIso) {
+					return aIso.localeCompare(bIso);
 				}
 				return (a.timestamp ?? "").localeCompare(b.timestamp ?? "");
 			});
@@ -283,6 +440,68 @@ export function mergeReactionEntries(base: ReactionEntry, incoming: ReactionEntr
 }
 
 /**
+ * Validate shard id format.
+ * @param shardId - Candidate shard id.
+ * @returns True when valid.
+ */
+function isValidShardId(shardId: string): boolean {
+	return SHARD_ID_PATTERN.test(shardId.trim());
+}
+
+/**
+ * Sort and deduplicate shard IDs deterministically.
+ * @param shardIds - Candidate shard IDs.
+ * @returns Canonical shard ID list.
+ */
+function canonicalizeShardIds(shardIds: string[]): string[] {
+	const unique = Array.from(new Set(shardIds.filter((shardId) => isValidShardId(shardId))));
+	unique.sort((a, b) => {
+		const aNum = Number(a.slice(SHARD_PREFIX.length));
+		const bNum = Number(b.slice(SHARD_PREFIX.length));
+		if (!Number.isNaN(aNum) && !Number.isNaN(bNum) && aNum !== bNum) {
+			return aNum - bNum;
+		}
+		return a.localeCompare(b);
+	});
+	return unique;
+}
+
+/**
+ * Check whether payload represents a shard index page.
+ * @param payload - Candidate payload.
+ * @returns True when payload is sharded index metadata.
+ */
+function isShardedPayload(payload: ReactionDatabasePayload): boolean {
+	return payload.sharded === true
+		&& Array.isArray(payload.shards)
+		&& payload.shards.length > 0
+		&& Boolean(payload.shardMap && typeof payload.shardMap === "object");
+}
+
+/**
+ * Build a shard page title from base title and shard id.
+ * @param baseTitle - Base database title.
+ * @param shardId - Shard id.
+ * @returns Full shard title.
+ */
+function buildShardTitle(baseTitle: string, shardId: string): string {
+	return `${baseTitle}/${shardId}`;
+}
+
+/**
+ * Clone entries map.
+ * @param entries - Source entries.
+ * @returns Shallow-cloned entries map.
+ */
+function cloneEntries(entries: Record<string, ReactionEntry>): Record<string, ReactionEntry> {
+	const result: Record<string, ReactionEntry> = {};
+	for (const [commentId, entry] of Object.entries(entries)) {
+		result[commentId] = canonicalizeReactionEntry(entry);
+	}
+	return result;
+}
+
+/**
  * Canonicalize database payload and ensure stable key ordering.
  * @param payload - Raw payload.
  * @returns Canonical payload.
@@ -296,10 +515,30 @@ export function canonicalizeDatabasePayload(payload: ReactionDatabasePayload): R
 			entries[commentId] = canonicalEntry;
 		}
 	});
-	return {
+	const canonical: ReactionDatabasePayload = {
 		version: payload.version || SUPPORTED_SCHEMA_VERSION,
 		entries,
 	};
+
+	if (payload.sharded) {
+		const shards = canonicalizeShardIds(payload.shards ?? []);
+		if (shards.length > 0 && payload.shardMap && typeof payload.shardMap === "object") {
+			const shardSet = new Set(shards);
+			const shardMap: Record<string, string> = {};
+			const mapCommentIds = Object.keys(payload.shardMap).sort((a, b) => a.localeCompare(b));
+			mapCommentIds.forEach((commentId) => {
+				const shardId = payload.shardMap?.[commentId];
+				if (typeof shardId === "string" && shardSet.has(shardId)) {
+					shardMap[commentId] = shardId;
+				}
+			});
+			canonical.sharded = true;
+			canonical.shards = shards;
+			canonical.shardMap = shardMap;
+		}
+	}
+
+	return canonical;
 }
 
 /**
@@ -385,7 +624,13 @@ function parseDatabasePageText(pageText: string): DatabasePageParseSuccess | Dat
 	if (!parsed || typeof parsed !== "object") {
 		return { readOnly: true, reason: "database_json_invalid" };
 	}
-	const record = parsed as { version?: unknown; entries?: unknown };
+	const record = parsed as {
+		version?: unknown;
+		entries?: unknown;
+		sharded?: unknown;
+		shards?: unknown;
+		shardMap?: unknown;
+	};
 	const version = typeof record.version === "number" ? record.version : SUPPORTED_SCHEMA_VERSION;
 	if (version > SUPPORTED_SCHEMA_VERSION) {
 		return { readOnly: true, reason: "database_version_unsupported" };
@@ -409,23 +654,57 @@ function parseDatabasePageText(pageText: string): DatabasePageParseSuccess | Dat
 				if (!item || typeof item !== "object") {
 					return;
 				}
-				const participant = item as { user?: unknown; timestamp?: unknown };
+				const participant = item as { user?: unknown; timestamp?: unknown; timestampIso?: unknown };
 				if (typeof participant.user !== "string") {
 					return;
 				}
 				participants.push({
 					user: participant.user,
 					timestamp: typeof participant.timestamp === "string" ? participant.timestamp : undefined,
+					timestampIso: typeof participant.timestampIso === "string" ? participant.timestampIso : undefined,
 				});
 			});
 			entry[icon] = participants;
 		}
 		entries[commentId] = entry;
 	}
+
+	const sharded = record.sharded === true;
+	let shards: string[] | undefined;
+	let shardMap: Record<string, string> | undefined;
+	if (sharded) {
+		if (!Array.isArray(record.shards) || !record.shardMap || typeof record.shardMap !== "object") {
+			return { readOnly: true, reason: "database_shard_index_invalid" };
+		}
+		const parsedShards = canonicalizeShardIds(
+			record.shards.filter((item): item is string => typeof item === "string"),
+		);
+		if (parsedShards.length === 0) {
+			return { readOnly: true, reason: "database_shard_index_invalid" };
+		}
+		const shardSet = new Set(parsedShards);
+		const rawShardMap = record.shardMap as Record<string, unknown>;
+		const parsedMap: Record<string, string> = {};
+		for (const [commentId, rawShardId] of Object.entries(rawShardMap)) {
+			if (typeof rawShardId !== "string") {
+				continue;
+			}
+			if (!shardSet.has(rawShardId)) {
+				continue;
+			}
+			parsedMap[commentId] = rawShardId;
+		}
+		shards = parsedShards;
+		shardMap = parsedMap;
+	}
+
 	return {
 		payload: canonicalizeDatabasePayload({
 			version,
 			entries,
+			sharded,
+			shards,
+			shardMap,
 		}),
 	};
 }
@@ -439,6 +718,104 @@ function makeEmptyPayload(): ReactionDatabasePayload {
 		version: SUPPORTED_SCHEMA_VERSION,
 		entries: {},
 	};
+}
+
+/**
+ * Compute UTF-8 byte length for a string.
+ * @param text - Input text.
+ * @returns UTF-8 byte length.
+ */
+function utf8ByteLength(text: string): number {
+	if (typeof TextEncoder !== "undefined") {
+		return new TextEncoder().encode(text).length;
+	}
+	if (typeof Buffer !== "undefined") {
+		return Buffer.byteLength(text, "utf8");
+	}
+	return text.length;
+}
+
+/**
+ * Measure wrapped payload size in bytes.
+ * @param payload - Payload to measure.
+ * @returns Wrapped text size in bytes.
+ */
+function wrappedPayloadSize(payload: ReactionDatabasePayload): number {
+	const wrapped = wrapJsonPayloadForDatabasePage(serializePayloadJson(payload));
+	return utf8ByteLength(wrapped);
+}
+
+/**
+ * Split entries into deterministic shards by size.
+ * @param entries - Combined entries map.
+ * @returns Shard layout.
+ */
+function splitEntriesIntoShards(entries: Record<string, ReactionEntry>): ShardLayout {
+	const commentIds = Object.keys(entries).sort((a, b) => a.localeCompare(b));
+	const shardGroups: Array<Record<string, ReactionEntry>> = [];
+	let currentGroup: Record<string, ReactionEntry> = {};
+
+	const pushCurrentGroup = (): void => {
+		if (Object.keys(currentGroup).length === 0) {
+			return;
+		}
+		shardGroups.push(currentGroup);
+		currentGroup = {};
+	};
+
+	for (const commentId of commentIds) {
+		const candidateGroup = {
+			...currentGroup,
+			[commentId]: entries[commentId],
+		};
+		const candidatePayload: ReactionDatabasePayload = {
+			version: SUPPORTED_SCHEMA_VERSION,
+			entries: candidateGroup,
+		};
+		const candidateSize = wrappedPayloadSize(candidatePayload);
+		if (candidateSize <= DATABASE_PAGE_SOFT_LIMIT_BYTES || Object.keys(currentGroup).length === 0) {
+			currentGroup = candidateGroup;
+			continue;
+		}
+		pushCurrentGroup();
+		currentGroup = { [commentId]: entries[commentId] };
+	}
+	pushCurrentGroup();
+
+	const shardEntries: Array<{ shardId: string; entries: Record<string, ReactionEntry> }> = [];
+	const shardMap: Record<string, string> = {};
+	shardGroups.forEach((group, index) => {
+		const shardId = `${SHARD_PREFIX}${index + 1}`;
+		const canonicalEntries = canonicalizeDatabasePayload({
+			version: SUPPORTED_SCHEMA_VERSION,
+			entries: group,
+		}).entries;
+		shardEntries.push({
+			shardId,
+			entries: canonicalEntries,
+		});
+		Object.keys(canonicalEntries).forEach((commentId) => {
+			shardMap[commentId] = shardId;
+		});
+	});
+
+	return {
+		shardEntries,
+		shardMap,
+	};
+}
+
+/**
+ * Invalidate cache for base page and its shards.
+ * @param baseTitle - Base database title.
+ */
+function invalidateCacheForBase(baseTitle: string): void {
+	const shardPrefix = `${baseTitle}/`;
+	for (const key of Array.from(databaseCache.keys())) {
+		if (key === baseTitle || key.startsWith(shardPrefix)) {
+			databaseCache.delete(key);
+		}
+	}
 }
 
 /**
@@ -484,6 +861,22 @@ export async function loadReactionDatabasePage(
 			}
 			const parsed = parseDatabasePageText(snapshot.text);
 			if ("readOnly" in parsed) {
+				if (RECOVER_AS_EMPTY_PARSE_REASONS.has(parsed.reason)) {
+					console.warn(
+						"[Reaction] Recovering malformed reaction database page as empty payload.",
+						title,
+						parsed.reason,
+					);
+					const payload = makeEmptyPayload();
+					databaseCache.set(title, { payload, fetchedAt: Date.now() });
+					clearReadOnly(title);
+					return {
+						ok: true,
+						title,
+						payload,
+						fromCache: false,
+					};
+				}
 				markReadOnly(title, parsed.reason);
 				return {
 					ok: false,
@@ -524,6 +917,83 @@ export async function loadReactionDatabasePage(
 }
 
 /**
+ * Load all entries for a base database title, resolving shard pages when needed.
+ * @param title - Base database title.
+ * @param options - Load options.
+ * @returns Combined entries or read-only error.
+ */
+async function loadCombinedEntries(
+	title: string,
+	options?: { fresh?: boolean },
+): Promise<CombinedEntriesLoadResult> {
+	const basePage = await loadReactionDatabasePage(title, options);
+	if (!basePage.ok) {
+		return {
+			ok: false,
+			title,
+			readOnly: true,
+			reason: basePage.reason,
+		};
+	}
+
+	if (!isShardedPayload(basePage.payload)) {
+		return {
+			ok: true,
+			title,
+			entries: cloneEntries(basePage.payload.entries),
+		};
+	}
+
+	const shards = basePage.payload.shards ?? [];
+	const shardLoads = await Promise.all(
+		shards.map(async (shardId) => {
+			const shardTitle = buildShardTitle(title, shardId);
+			const shardPage = await loadReactionDatabasePage(shardTitle, options);
+			return {
+				shardPage,
+			};
+		}),
+	);
+	for (const load of shardLoads) {
+		if (!load.shardPage.ok) {
+			return {
+				ok: false,
+				title,
+				readOnly: true,
+				reason: load.shardPage.reason,
+			};
+		}
+	}
+
+	const combinedEntries: Record<string, ReactionEntry> = {};
+	for (const [commentId, entry] of Object.entries(basePage.payload.entries)) {
+		combinedEntries[commentId] = canonicalizeReactionEntry(entry);
+	}
+	for (const load of shardLoads) {
+		if (!load.shardPage.ok) {
+			continue;
+		}
+		for (const [commentId, entry] of Object.entries(load.shardPage.payload.entries)) {
+			const existing = combinedEntries[commentId];
+			if (existing) {
+				combinedEntries[commentId] = mergeReactionEntries(existing, entry);
+			} else {
+				combinedEntries[commentId] = canonicalizeReactionEntry(entry);
+			}
+		}
+	}
+
+	return {
+		ok: true,
+		title,
+		entries: canonicalizeDatabasePayload({
+			version: SUPPORTED_SCHEMA_VERSION,
+			entries: combinedEntries,
+		}).entries,
+	};
+}
+
+/**
  * Retrieve a comment entry from centralized storage.
  * @param commentId - DiscussionTools comment id.
  * @param options - Read options.
@@ -555,11 +1025,46 @@ export async function getReactionEntryForComment(
 			reason: page.reason,
 		};
 	}
+
+	if (!isShardedPayload(page.payload)) {
+		return {
+			title,
+			entry: page.payload.entries[commentId] ?? null,
+			readOnly: isReactionDatabaseReadOnlyTitle(title),
+			reason: readOnlyReasons.get(title),
+		};
+	}
+
+	const shards = page.payload.shards ?? [];
+	const preferredShard = page.payload.shardMap?.[commentId];
+	const orderedShardIds = preferredShard
+		? [preferredShard, ...shards.filter((shardId) => shardId !== preferredShard)]
+		: shards.slice();
+	for (const shardId of orderedShardIds) {
+		const shardTitle = buildShardTitle(title, shardId);
+		const shardPage = await loadReactionDatabasePage(shardTitle, options);
+		if (!shardPage.ok) {
+			return {
+				title,
+				entry: null,
+				readOnly: true,
+				reason: shardPage.reason,
+			};
+		}
+		const entry = shardPage.payload.entries[commentId];
+		if (entry) {
+			return {
+				title,
+				entry,
+				readOnly: false,
+			};
+		}
+	}
+
 	return {
 		title,
-		entry: page.payload.entries[commentId] ?? null,
-		readOnly: isReactionDatabaseReadOnlyTitle(title),
-		reason: readOnlyReasons.get(title),
+		entry: null,
+		readOnly: false,
 	};
 }
 
@@ -577,7 +1082,8 @@ export async function saveReactionDatabasePage(
 	summary: string,
 	options?: { notifySuccess?: boolean; notifyFailure?: boolean },
 ): Promise<SavePageWikitextResult> {
-	const wrapped = wrapJsonPayloadForDatabasePage(serializePayloadJson(payload));
+	const canonicalPayload = canonicalizeDatabasePayload(payload);
+	const wrapped = wrapJsonPayloadForDatabasePage(serializePayloadJson(canonicalPayload));
 	const result = await savePageWikitext(title, wrapped, summary, {
 		notifySuccess: options?.notifySuccess ?? false,
 		notifyFailure: options?.notifyFailure ?? true,
@@ -585,7 +1091,7 @@ export async function saveReactionDatabasePage(
 	});
 	if (result.ok) {
 		databaseCache.set(title, {
-			payload: canonicalizeDatabasePayload(payload),
+			payload: canonicalPayload,
 			fetchedAt: Date.now(),
 		});
 		clearReadOnly(title);
@@ -593,6 +1099,120 @@ export async function saveReactionDatabasePage(
 		databaseCache.delete(title);
 	}
 	return result;
+}
+
+/**
+ * Persist as single-page payload.
+ * @param title - Base title.
+ * @param entries - Combined entries.
+ * @param summary - Edit summary.
+ * @param options - Save options.
+ * @returns Save result.
+ */
+async function persistAsSinglePage(
+	title: string,
+	entries: Record<string, ReactionEntry>,
+	summary: string,
+	options?: { notifySuccess?: boolean; notifyFailure?: boolean },
+): Promise<SavePageWikitextResult> {
+	const payload: ReactionDatabasePayload = {
+		version: SUPPORTED_SCHEMA_VERSION,
+		entries,
+	};
+	return saveReactionDatabasePage(title, payload, summary, options);
+}
+
+/**
+ * Persist as sharded payload.
+ * @param title - Base title.
+ * @param layout - Shard layout.
+ * @param summary - Edit summary.
+ * @param options - Save options.
+ * @returns Save result.
+ */
+async function persistAsShardedPages(
+	title: string,
+	layout: ShardLayout,
+	summary: string,
+	options?: { notifySuccess?: boolean; notifyFailure?: boolean },
+): Promise<SavePageWikitextResult> {
+	for (const shard of layout.shardEntries) {
+		const shardTitle = buildShardTitle(title, shard.shardId);
+		const shardSave = await saveReactionDatabasePage(
+			shardTitle,
+			{
+				version: SUPPORTED_SCHEMA_VERSION,
+				entries: shard.entries,
+			},
+			summary,
+			{
+				notifySuccess: false,
+				notifyFailure: false,
+			},
+		);
+		if (!shardSave.ok) {
+			return shardSave;
+		}
+	}
+
+	const basePayload: ReactionDatabasePayload = {
+		version: SUPPORTED_SCHEMA_VERSION,
+		entries: {},
+		sharded: true,
+		shards: layout.shardEntries.map((shard) => shard.shardId),
+		shardMap: layout.shardMap,
+	};
+	const baseSave = await saveReactionDatabasePage(title, basePayload, summary, options);
+	if (!baseSave.ok) {
+		invalidateCacheForBase(title);
+	}
+	return baseSave;
+}
+
+/**
+ * Persist combined entries using single-page or sharded strategy.
+ * @param title - Base title.
+ * @param entries - Combined entries.
+ * @param summary - Edit summary.
+ * @param options - Save options.
+ * @returns Save result.
+ */
+async function persistCombinedEntries(
+	title: string,
+	entries: Record<string, ReactionEntry>,
+	summary: string,
+	options?: { notifySuccess?: boolean; notifyFailure?: boolean },
+): Promise<SavePageWikitextResult> {
+	const canonicalEntries = canonicalizeDatabasePayload({
+		version: SUPPORTED_SCHEMA_VERSION,
+		entries,
+	}).entries;
+
+	const singlePayload: ReactionDatabasePayload = {
+		version: SUPPORTED_SCHEMA_VERSION,
+		entries: canonicalEntries,
+	};
+	if (wrappedPayloadSize(singlePayload) <= DATABASE_PAGE_SOFT_LIMIT_BYTES) {
+		return persistAsSinglePage(title, canonicalEntries, summary, options);
+	}
+
+	const layout = splitEntriesIntoShards(canonicalEntries);
+	const baseIndexPayload: ReactionDatabasePayload = {
+		version: SUPPORTED_SCHEMA_VERSION,
+		entries: {},
+		sharded: true,
+		shards: layout.shardEntries.map((shard) => shard.shardId),
+		shardMap: layout.shardMap,
+	};
+	if (wrappedPayloadSize(baseIndexPayload) > DATABASE_PAGE_SOFT_LIMIT_BYTES) {
+		return {
+			ok: false,
+			errorCode: "database_shard_index_too_large",
+			errorInfo: "Shard index exceeded page size limit.",
+		};
+	}
+
+	return persistAsShardedPages(title, layout, summary, options);
 }
 
 /**
@@ -644,10 +1264,13 @@ function isReadOnlySaveError(result: SavePageWikitextResult): boolean {
  */
 function applyMutationToEntry(current: ReactionEntry, request: ReactionMutationRequest): UpdateEntryResult {
 	const normalizedIcon = normalizeIcon(request.icon);
-	const normalizedUser = normalizeTitle(request.user);
+	const normalizedUser = normalizeUser(request.user);
 	if (!normalizedIcon || !normalizedUser) {
 		return { changed: false, entry: canonicalizeReactionEntry(current), reason: "no_changes" };
 	}
+	const timestamp = normalizeTimestamp(request.timestamp);
+	const timestampIso = normalizeTimestampIso(request.timestampIso)
+		?? deriveIsoFromSignatureTimestamp(timestamp);
 	const entry = canonicalizeReactionEntry(current);
 	const bucket = entry[normalizedIcon] ? entry[normalizedIcon].slice() : [];
 	const userKey = toUserKey(normalizedUser);
@@ -656,7 +1279,7 @@ function applyMutationToEntry(current: ReactionEntry, request: ReactionMutationR
 		if (bucket.length > 0) {
 			return { changed: false, entry, reason: "reaction_exists" };
 		}
-		entry[normalizedIcon] = [{ user: normalizedUser, timestamp: request.timestamp?.trim() || undefined }];
+		entry[normalizedIcon] = [{ user: normalizedUser, timestamp, timestampIso }];
 		return { changed: true, entry: canonicalizeReactionEntry(entry) };
 	}
 
@@ -667,7 +1290,8 @@ function applyMutationToEntry(current: ReactionEntry, request: ReactionMutationR
 		}
 		bucket.push({
 			user: normalizedUser,
-			timestamp: request.timestamp?.trim() || undefined,
+			timestamp,
+			timestampIso,
 		});
 		entry[normalizedIcon] = bucket;
 		return { changed: true, entry: canonicalizeReactionEntry(entry) };
@@ -714,21 +1338,18 @@ async function updateCommentEntry(
 
 	return enqueuePageTask(title, async () => {
 		for (let attempt = 0; attempt < 3; attempt++) {
-			const page = await loadReactionDatabasePage(title, { fresh: true });
-			if (!page.ok) {
+			const combined = await loadCombinedEntries(title, { fresh: true });
+			if (!combined.ok) {
 				return {
 					ok: false,
 					title,
 					entry: null,
 					readOnly: true,
-					reason: page.reason,
+					reason: combined.reason,
 				};
 			}
-			const payload: ReactionDatabasePayload = {
-				version: page.payload.version,
-				entries: { ...page.payload.entries },
-			};
-			const currentEntry = payload.entries[commentId] ?? {};
+
+			const currentEntry = combined.entries[commentId] ?? {};
 			const updated = updater(currentEntry);
 			if (!updated.changed) {
 				return {
@@ -739,13 +1360,14 @@ async function updateCommentEntry(
 					reason: updated.reason ?? "no_changes",
 				};
 			}
+			const nextEntries = cloneEntries(combined.entries);
 			if (updated.entry && hasReactionEntryData(updated.entry)) {
-				payload.entries[commentId] = canonicalizeReactionEntry(updated.entry);
+				nextEntries[commentId] = canonicalizeReactionEntry(updated.entry);
 			} else {
-				delete payload.entries[commentId];
+				delete nextEntries[commentId];
 			}
-			const canonicalPayload = canonicalizeDatabasePayload(payload);
-			const saveResult = await saveReactionDatabasePage(title, canonicalPayload, options.summary, {
+
+			const saveResult = await persistCombinedEntries(title, nextEntries, options.summary, {
 				notifySuccess: options.notifySuccess,
 				notifyFailure: options.notifyFailure,
 			});
@@ -753,10 +1375,13 @@ async function updateCommentEntry(
 				return {
 					ok: true,
 					title,
-					entry: canonicalPayload.entries[commentId] ?? null,
+					entry: nextEntries[commentId] ?? null,
 					readOnly: false,
 				};
 			}
+
+			invalidateCacheForBase(title);
+
 			if (saveResult.errorCode === "editconflict" && attempt < 2) {
 				const backoff = 150 * (2 ** attempt) + Math.floor(Math.random() * 120);
 				await delay(backoff);

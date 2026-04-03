@@ -7,6 +7,14 @@ import {
 	type ReactionMutationRequest,
 } from "../reactionData/store";
 
+/**
+ * Resolve current UTC timestamp in second precision ISO format.
+ * @returns ISO timestamp.
+ */
+function getCurrentTimestampIso(): string {
+	return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
 export interface ModifyReactionRequest {
 	timestamp: string;
 	author?: string | null;
@@ -46,6 +54,8 @@ function toFailureMessage(reason?: string): string {
 		case "database_version_unsupported":
 		case "database_load_failed":
 		case "database_write_readonly":
+		case "database_shard_index_invalid":
+		case "database_shard_index_too_large":
 			return "[Reaction] Reaction database page is read-only or invalid.";
 		default:
 			return tReaction("api.notifications.save_failure");
@@ -81,12 +91,14 @@ function buildMutationRequest(mod: ModifyReactionRequest): ReactionMutationReque
 		if (!icon) {
 			return null;
 		}
+		const timestamp = getCurrentSignatureTimestamp();
 		return {
 			commentId,
 			action: "upvote",
 			icon,
 			user: state.userName,
-			timestamp: getCurrentSignatureTimestamp(),
+			timestamp,
+			timestampIso: getCurrentTimestampIso(),
 			notifySuccess: true,
 			notifyFailure: true,
 		};
@@ -96,12 +108,14 @@ function buildMutationRequest(mod: ModifyReactionRequest): ReactionMutationReque
 		if (!icon) {
 			return null;
 		}
+		const timestamp = getCurrentSignatureTimestamp();
 		return {
 			commentId,
 			action: "append",
 			icon,
 			user: state.userName,
-			timestamp: getCurrentSignatureTimestamp(),
+			timestamp,
+			timestampIso: getCurrentTimestampIso(),
 			notifySuccess: true,
 			notifyFailure: true,
 		};
@@ -143,4 +157,3 @@ export async function modifyReactionInDatabase(mod: ModifyReactionRequest): Prom
 		entry: result.entry ?? null,
 	};
 }
-

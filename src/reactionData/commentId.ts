@@ -1,12 +1,29 @@
 import { normalizeTitle } from "../utils";
 
 const COMMENT_ID_PATTERN = /^c-(?<owner>.+?)-(?<ts>\d{14})(?:-|$)/;
-const DATABASE_TITLE_PREFIX = "Wikipedia:Reactions/data";
+const DEFAULT_PROJECT_NAMESPACE = "Project";
 
 export interface ParsedCommentId {
 	owner: string;
 	monthKey: string;
 	timestamp: string;
+}
+
+/**
+ * Resolve local project namespace prefix (namespace 4) from MediaWiki config.
+ * @returns Normalized project namespace name.
+ */
+export function resolveProjectNamespacePrefix(): string {
+	const mwGlobal = (globalThis as { mw?: typeof mw }).mw;
+	const rawMap = mwGlobal?.config?.get("wgFormattedNamespaces");
+	if (rawMap && typeof rawMap === "object") {
+		const map = rawMap as Record<string, unknown>;
+		const value = map["4"];
+		if (typeof value === "string" && value.trim().length > 0) {
+			return normalizeTitle(value);
+		}
+	}
+	return DEFAULT_PROJECT_NAMESPACE;
 }
 
 /**
@@ -37,7 +54,8 @@ export function parseCommentIdForDatabase(commentId: string): ParsedCommentId | 
  * @returns Database page title.
  */
 export function buildDatabaseTitle(parsed: ParsedCommentId): string {
-	return `${DATABASE_TITLE_PREFIX}/${parsed.owner}/${parsed.monthKey}`;
+	const projectNamespace = resolveProjectNamespacePrefix();
+	return `${projectNamespace}:Reactions/data/${parsed.owner}/${parsed.monthKey}`;
 }
 
 /**
@@ -52,4 +70,3 @@ export function resolveDatabaseTitleFromCommentId(commentId: string): string | n
 	}
 	return buildDatabaseTitle(parsed);
 }
-

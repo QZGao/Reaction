@@ -57,7 +57,12 @@ const COMMENT_STATUS_ATTRIBUTES = [
 ] as const;
 const REACTION_BLACKLISTED_NOTICE_KEY = "emojiPicker.notice.reaction_blacklisted";
 const REACTION_DB_READONLY_NOTICE = "[Reaction] Reaction database for this comment is read-only.";
+
+type ReactionRoot = Document | DocumentFragment | Element;
+
 let hydrationRunToken = 0;
+let hydrationDrainPromise: Promise<void> | null = null;
+const pendingHydrationRoots: ReactionRoot[] = [];
 
 interface StoredCommentMetadata {
 	commentId?: string | null;
@@ -1097,8 +1102,6 @@ interface ProcessReactionRootResult {
 	hydrationTargets: ReactionHydrationTarget[];
 }
 
-type ReactionRoot = Document | DocumentFragment | Element;
-
 /**
  * Collect reaction buttons between a timestamp and anchor element.
  * @param timestamp - Timestamp element.
@@ -1408,32 +1411,90 @@ function processConvenientDiscussionMenus(
 }
 
 /**
- * Entry point that wires reaction buttons into the page.
- * @param containers {ReactionRoot | ReactionRoot[] | null | undefined} Optional subset of the DOM to process.
+ * Normalize addReactionButtons input into a deduplicated root list.
+ * @param containers - Optional root or root list.
+ * @returns Deduplicated roots.
  */
-export async function addReactionButtons(containers?: ReactionRoot | ReactionRoot[] | null) {
+function normalizeHydrationRoots(containers?: ReactionRoot | ReactionRoot[] | null): ReactionRoot[] {
 	const roots: ReactionRoot[] = [];
 	if (!containers) {
 		roots.push(document);
 	} else if (Array.isArray(containers)) {
 		for (const root of containers) {
-			if (root) {
+			if (root && !roots.includes(root)) {
 				roots.push(root);
 			}
 		}
 	} else {
 		roots.push(containers);
 	}
+	if (roots.some((root) => root === document)) {
+		return [document];
+	}
+	return roots;
+}
 
+/**
+ * Queue hydration roots for the next drain pass.
+ * @param roots - Roots to enqueue.
+ */
+function enqueueHydrationRoots(roots: ReactionRoot[]): void {
+	if (roots.length === 0) {
+		return;
+	}
+	if (roots.some((root) => root === document)) {
+		pendingHydrationRoots.length = 0;
+		pendingHydrationRoots.push(document);
+		return;
+	}
+	if (pendingHydrationRoots.some((root) => root === document)) {
+		return;
+	}
+	for (const root of roots) {
+		if (!pendingHydrationRoots.includes(root)) {
+			pendingHydrationRoots.push(root);
+		}
+	}
+}
+
+/**
+ * Dequeue pending hydration roots as a single batch.
+ * @returns Pending roots for one batch.
+ */
+function takePendingHydrationRoots(): ReactionRoot[] {
+	if (pendingHydrationRoots.length === 0) {
+		return [];
+	}
+	if (pendingHydrationRoots.some((root) => root === document)) {
+		pendingHydrationRoots.length = 0;
+		return [document];
+	}
+	const batch = pendingHydrationRoots.slice();
+	pendingHydrationRoots.length = 0;
+	return batch;
+}
+
+/**
+ * Process one hydration batch.
+ * @param roots - Roots to hydrate.
+ * @param runToken - Current run token.
+ */
+async function processHydrationBatch(roots: ReactionRoot[], runToken: number): Promise<void> {
+	if (runToken !== hydrationRunToken) {
+		return;
+	}
 	const includesDocumentRoot = roots.some((root) => root === document);
 	if (includesDocumentRoot) {
-		await runLegacyInlineMigrationOnce();
+		// Migration is intentionally fire-and-forget so hydration is never blocked by full-page migration.
+		void runLegacyInlineMigrationOnce();
 	}
 
 	const lookup = await getDiscussionToolsLookup();
+	if (runToken !== hydrationRunToken) {
+		return;
+	}
 	const useDomAnchors = Boolean(document.querySelector(COMMENT_MARKER_SELECTOR));
 	const matchingState = !useDomAnchors && lookup ? createMatchingState(lookup) : null;
-	const runToken = ++hydrationRunToken;
 
 	let totalInserted = 0;
 	for (const root of roots) {
@@ -1494,10 +1555,48 @@ export async function addReactionButtons(containers?: ReactionRoot | ReactionRoo
 }
 
 /**
+ * Start queued hydration drain if not running.
+ * @returns Promise for active drain.
+ */
+function startHydrationDrain(): Promise<void> {
+	if (hydrationDrainPromise) {
+		return hydrationDrainPromise;
+	}
+	hydrationDrainPromise = (async () => {
+		while (true) {
+			const roots = takePendingHydrationRoots();
+			if (roots.length === 0) {
+				return;
+			}
+			const runToken = hydrationRunToken;
+			await processHydrationBatch(roots, runToken);
+		}
+	})()
+		.finally(() => {
+			hydrationDrainPromise = null;
+			if (pendingHydrationRoots.length > 0) {
+				void startHydrationDrain();
+			}
+		});
+	return hydrationDrainPromise;
+}
+
+/**
+ * Entry point that wires reaction buttons into the page.
+ * @param containers {ReactionRoot | ReactionRoot[] | null | undefined} Optional subset of the DOM to process.
+ */
+export async function addReactionButtons(containers?: ReactionRoot | ReactionRoot[] | null) {
+	const roots = normalizeHydrationRoots(containers);
+	enqueueHydrationRoots(roots);
+	await startHydrationDrain();
+}
+
+/**
  * Disable all reaction modifications on the page.
  */
 function disableReaction(): void {
 	hydrationRunToken++;
+	pendingHydrationRoots.length = 0;
 	hideEmojiPicker();
 	const buttons = Array.from(document.querySelectorAll<HTMLElement>(".template-reaction"));
 	for (const button of buttons) {
