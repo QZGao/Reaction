@@ -63,15 +63,38 @@ interface CombinedEntriesLoadSuccess {
 	entries: Record<string, ReactionEntry>;
 	pageSnapshots: Record<string, PageWikitextSnapshot>;
 }
+type LoadedReactionDatabasePage = Extract<ReactionDatabasePageResult, { ok: true }>;
 
-interface CombinedEntriesLoadFailure {
-	ok: false;
-	title: string;
+interface ShardedMutationState {
+	basePage: LoadedReactionDatabasePage;
+	mappedShardId: string | null;
+	workingShardId: string;
+	workingShardTitle: string;
+	workingShardPage: LoadedReactionDatabasePage;
+}
+
+interface ShardedMutationAttemptLoadFailure {
+	kind: "load_failure";
 	reason: string;
 	readOnly: true;
 }
 
-type CombinedEntriesLoadResult = CombinedEntriesLoadSuccess | CombinedEntriesLoadFailure;
+interface ShardedMutationAttemptNoChange {
+	kind: "no_change";
+	entry: ReactionEntry | null;
+	reason?: string;
+}
+
+interface ShardedMutationAttemptSave {
+	kind: "save";
+	entry: ReactionEntry | null;
+	saveResult: SavePageWikitextResult;
+}
+
+type ShardedMutationAttemptResult =
+	| ShardedMutationAttemptLoadFailure
+	| ShardedMutationAttemptNoChange
+	| ShardedMutationAttemptSave;
 
 export interface ReactionParticipantRecord {
 	user: string;
@@ -123,7 +146,7 @@ interface UpdateCommentEntryOptions {
 
 const databaseCache = new Map<string, CachedDatabasePage>();
 const inFlightLoads = new Map<string, Promise<ReactionDatabasePageResult>>();
-const pageWriteQueue = new Map<string, Promise<unknown>>();
+const pageWriteQueue = new Map<string, Promise<void>>();
 const readOnlyReasons = new Map<string, string>();
 const malformedCommentIds = new Set<string>();
 
@@ -813,6 +836,67 @@ function splitEntriesIntoShards(entries: Record<string, ReactionEntry>): ShardLa
 }
 
 /**
+ * Return the next deterministic shard id for a base page.
+ * @param shardIds - Existing shard ids.
+ * @returns Next shard id.
+ */
+function allocateNextShardId(shardIds: string[]): string {
+	let maxNumber = 0;
+	for (const shardId of shardIds) {
+		const parsed = Number(shardId.slice(SHARD_PREFIX.length));
+		if (!Number.isNaN(parsed) && parsed > maxNumber) {
+			maxNumber = parsed;
+		}
+	}
+	return `${SHARD_PREFIX}${maxNumber + 1}`;
+}
+
+/**
+ * Build canonical shard index payload for a sharded base page.
+ * @param shardIds - Shard ids in stable order.
+ * @param shardMap - Comment-to-shard mapping.
+ * @returns Canonical base payload.
+ */
+function buildShardIndexPayload(
+	shardIds: string[],
+	shardMap: Record<string, string>,
+): ReactionDatabasePayload {
+	return canonicalizeDatabasePayload({
+		version: SUPPORTED_SCHEMA_VERSION,
+		entries: {},
+		sharded: true,
+		shards: shardIds,
+		shardMap,
+	});
+}
+
+/**
+ * Determine whether a shard payload fits within the configured soft limit.
+ * Single-entry shards are allowed to exceed the soft limit because they cannot be split further.
+ * @param entries - Candidate shard entries.
+ * @returns True when the shard can be persisted.
+ */
+function canPersistShardEntries(entries: Record<string, ReactionEntry>): boolean {
+	return wrappedPayloadSize({
+		version: SUPPORTED_SCHEMA_VERSION,
+		entries,
+	}) <= DATABASE_PAGE_SOFT_LIMIT_BYTES || Object.keys(entries).length <= 1;
+}
+
+/**
+ * Create a missing-page snapshot for a new shard save.
+ * @returns Snapshot representing a missing page.
+ */
+function makeMissingPageSnapshot(): PageWikitextSnapshot {
+	return {
+		exists: false,
+		text: null,
+		revisionId: null,
+		revisionTimestamp: null,
+	};
+}
+
+/**
  * Invalidate cache for base page and its shards.
  * @param baseTitle - Base database title.
  */
@@ -925,92 +1009,6 @@ export async function loadReactionDatabasePage(
 			inFlightLoads.delete(title);
 		}
 	}
-}
-
-/**
- * Load all entries for a base database title, resolving shard pages when needed.
- * @param title - Base database title.
- * @param options - Load options.
- * @returns Combined entries or read-only error.
- */
-async function loadCombinedEntries(
-	title: string,
-	options?: { fresh?: boolean },
-): Promise<CombinedEntriesLoadResult> {
-	const basePage = await loadReactionDatabasePage(title, options);
-	if (!basePage.ok) {
-		return {
-			ok: false,
-			title,
-			readOnly: true,
-			reason: basePage.reason,
-		};
-	}
-
-	if (!isShardedPayload(basePage.payload)) {
-		return {
-			ok: true,
-			title,
-			entries: cloneEntries(basePage.payload.entries),
-			pageSnapshots: {
-				[title]: basePage.snapshot,
-			},
-		};
-	}
-
-	const shards = basePage.payload.shards ?? [];
-	const shardLoads = await Promise.all(
-		shards.map(async (shardId) => {
-			const shardTitle = buildShardTitle(title, shardId);
-			const shardPage = await loadReactionDatabasePage(shardTitle, options);
-			return {
-				shardTitle,
-				shardPage,
-			};
-		}),
-	);
-	for (const load of shardLoads) {
-		if (!load.shardPage.ok) {
-			return {
-				ok: false,
-				title,
-				readOnly: true,
-				reason: load.shardPage.reason,
-			};
-		}
-	}
-
-	const combinedEntries: Record<string, ReactionEntry> = {};
-	const pageSnapshots: Record<string, PageWikitextSnapshot> = {
-		[title]: basePage.snapshot,
-	};
-	for (const [commentId, entry] of Object.entries(basePage.payload.entries)) {
-		combinedEntries[commentId] = canonicalizeReactionEntry(entry);
-	}
-	for (const load of shardLoads) {
-		if (!load.shardPage.ok) {
-			continue;
-		}
-		pageSnapshots[load.shardTitle] = load.shardPage.snapshot;
-		for (const [commentId, entry] of Object.entries(load.shardPage.payload.entries)) {
-			const existing = combinedEntries[commentId];
-			if (existing) {
-				combinedEntries[commentId] = mergeReactionEntries(existing, entry);
-			} else {
-				combinedEntries[commentId] = canonicalizeReactionEntry(entry);
-			}
-		}
-	}
-
-	return {
-		ok: true,
-		title,
-		entries: canonicalizeDatabasePayload({
-			version: SUPPORTED_SCHEMA_VERSION,
-			entries: combinedEntries,
-		}).entries,
-		pageSnapshots,
-	};
 }
 
 /**
@@ -1269,23 +1267,290 @@ async function persistCombinedEntries(
 }
 
 /**
- * Execute a page mutation in serialized order for a database title.
- * @param title - Database page title.
+ * Resolve queue keys for a write so shard-mode operations lock both base and shard titles.
+ * @param title - Base database title.
+ * @param commentId - DiscussionTools comment id.
+ * @returns Ordered queue keys.
+ */
+async function resolveWriteQueueKeys(title: string, commentId: string): Promise<string[]> {
+	const basePage = await loadReactionDatabasePage(title);
+	if (!basePage.ok || !isShardedPayload(basePage.payload)) {
+		return [title];
+	}
+	const shardIds = basePage.payload.shards ?? [];
+	const shardId = basePage.payload.shardMap?.[commentId] ?? shardIds[shardIds.length - 1];
+	if (!shardId) {
+		return [title];
+	}
+	return [title, buildShardTitle(title, shardId)];
+}
+
+/**
+ * Execute a page mutation in serialized order for one or more queue keys.
+ * @param titles - Queue keys to reserve.
  * @param task - Task callback.
  * @returns Task result.
  */
-function enqueuePageTask<T>(title: string, task: () => Promise<T>): Promise<T> {
-	const previous = pageWriteQueue.get(title) ?? Promise.resolve();
-	const next = previous
-		.catch(() => undefined)
-		.then(task);
-	pageWriteQueue.set(title, next);
-	void next.finally(() => {
-		if (pageWriteQueue.get(title) === next) {
-			pageWriteQueue.delete(title);
-		}
+function enqueuePageTask<T>(titles: string[], task: () => Promise<T>): Promise<T> {
+	const queueKeys = Array.from(new Set(titles.filter((title) => title.trim().length > 0)));
+	queueKeys.sort((a, b) => a.localeCompare(b));
+	const previousReservations = queueKeys.map((title) => pageWriteQueue.get(title) ?? Promise.resolve());
+	let releaseReservation: (() => void) | null = null;
+	const reservation = new Promise<void>((resolve) => {
+		releaseReservation = resolve;
 	});
+	queueKeys.forEach((title) => {
+		pageWriteQueue.set(title, reservation);
+	});
+	const next = Promise.all(previousReservations.map((promise) => promise.catch(() => undefined)))
+		.then(task)
+		.finally(() => {
+			releaseReservation?.();
+			queueKeys.forEach((title) => {
+				if (pageWriteQueue.get(title) === reservation) {
+					pageWriteQueue.delete(title);
+				}
+			});
+		});
 	return next;
+}
+
+/**
+ * Load base page plus the shard currently responsible for a comment mutation.
+ * @param title - Base database title.
+ * @param commentId - DiscussionTools comment id.
+ * @returns Sharded mutation state or read-only load failure.
+ */
+async function loadShardedMutationState(
+	title: string,
+	commentId: string,
+	basePage: LoadedReactionDatabasePage,
+): Promise<ShardedMutationState | ShardedMutationAttemptLoadFailure> {
+	if (!isShardedPayload(basePage.payload)) {
+		return {
+			kind: "load_failure",
+			readOnly: true,
+			reason: "database_shard_index_invalid",
+		};
+	}
+	const shardIds = basePage.payload.shards ?? [];
+	const mappedShardId = basePage.payload.shardMap?.[commentId] ?? null;
+	const workingShardId = mappedShardId ?? shardIds[shardIds.length - 1] ?? null;
+	if (!workingShardId) {
+		return {
+			kind: "load_failure",
+			readOnly: true,
+			reason: "database_shard_index_invalid",
+		};
+	}
+	const workingShardTitle = buildShardTitle(title, workingShardId);
+	const workingShardPage = await loadReactionDatabasePage(workingShardTitle, { fresh: true });
+	if (!workingShardPage.ok) {
+		return {
+			kind: "load_failure",
+			readOnly: true,
+			reason: workingShardPage.reason,
+		};
+	}
+	return {
+		basePage,
+		mappedShardId,
+		workingShardId,
+		workingShardTitle,
+		workingShardPage,
+	};
+}
+
+/**
+ * Persist a targeted mutation against an already-sharded base page.
+ * Existing mapped comments stay in their current shard. New comments go to the last shard if it fits,
+ * otherwise they create the next deterministic shard. Base index writes only occur when the mapping changes.
+ * @param title - Base database title.
+ * @param commentId - DiscussionTools comment id.
+ * @param updater - Entry updater callback.
+ * @param options - Save options.
+ * @returns Sharded mutation attempt result.
+ */
+async function persistShardedMutationAttempt(
+	title: string,
+	commentId: string,
+	updater: (current: ReactionEntry) => UpdateEntryResult,
+	basePage: LoadedReactionDatabasePage,
+	options: UpdateCommentEntryOptions,
+): Promise<ShardedMutationAttemptResult> {
+	const shardedState = await loadShardedMutationState(title, commentId, basePage);
+	if ("kind" in shardedState) {
+		return shardedState;
+	}
+	const {
+		basePage: shardedBasePage,
+		mappedShardId,
+		workingShardId,
+		workingShardTitle,
+		workingShardPage,
+	} = shardedState;
+	const workingShardEntries = cloneEntries(workingShardPage.payload.entries);
+	const storedEntry = workingShardEntries[commentId] ?? null;
+	const currentEntry = storedEntry ?? {};
+	const updated = updater(currentEntry);
+
+	const storedEntryHasData = hasReactionEntryData(storedEntry);
+	const needsMappingAdditionRepair = mappedShardId === null && storedEntryHasData;
+	const needsMappingRemovalRepair = mappedShardId !== null && !storedEntryHasData;
+	if (!updated.changed && !needsMappingAdditionRepair && !needsMappingRemovalRepair) {
+		return {
+			kind: "no_change",
+			entry: updated.entry,
+			reason: updated.reason ?? "no_changes",
+		};
+	}
+
+	const nextEntry = updated.changed
+		? (updated.entry && hasReactionEntryData(updated.entry)
+			? canonicalizeReactionEntry(updated.entry)
+			: null)
+		: (needsMappingAdditionRepair && storedEntry
+			? canonicalizeReactionEntry(storedEntry)
+			: null);
+
+	if (mappedShardId !== null) {
+		if (nextEntry) {
+			workingShardEntries[commentId] = nextEntry;
+			const shardSave = await saveReactionDatabasePage(
+				workingShardTitle,
+				{
+					version: SUPPORTED_SCHEMA_VERSION,
+					entries: workingShardEntries,
+				},
+				options.summary,
+				{
+					notifySuccess: options.notifySuccess ?? false,
+					notifyFailure: false,
+					snapshot: workingShardPage.snapshot,
+				},
+			);
+			return {
+				kind: "save",
+				entry: nextEntry,
+				saveResult: shardSave,
+			};
+		}
+
+		delete workingShardEntries[commentId];
+		if (!needsMappingRemovalRepair) {
+			const shardSave = await saveReactionDatabasePage(
+				workingShardTitle,
+				{
+					version: SUPPORTED_SCHEMA_VERSION,
+					entries: workingShardEntries,
+				},
+				options.summary,
+				{
+					notifySuccess: false,
+					notifyFailure: false,
+					snapshot: workingShardPage.snapshot,
+				},
+			);
+			if (!shardSave.ok) {
+				return {
+					kind: "save",
+					entry: null,
+					saveResult: shardSave,
+				};
+			}
+		}
+
+		const nextShardMap = {
+			...(shardedBasePage.payload.shardMap ?? {}),
+		};
+		delete nextShardMap[commentId];
+		const basePayload = buildShardIndexPayload(shardedBasePage.payload.shards ?? [], nextShardMap);
+		const baseSave = await saveReactionDatabasePage(title, basePayload, options.summary, {
+			notifySuccess: options.notifySuccess ?? false,
+			notifyFailure: false,
+			snapshot: shardedBasePage.snapshot,
+		});
+		return {
+			kind: "save",
+			entry: null,
+			saveResult: baseSave,
+		};
+	}
+
+	if (!nextEntry) {
+		return {
+			kind: "no_change",
+			entry: null,
+			reason: updated.reason ?? "no_changes",
+		};
+	}
+
+	const currentShardIds = shardedBasePage.payload.shards ?? [];
+	let targetShardId = workingShardId;
+	let targetShardTitle = workingShardTitle;
+	let targetShardEntries = cloneEntries(workingShardEntries);
+	targetShardEntries[commentId] = nextEntry;
+	let targetShardSnapshot = workingShardPage.snapshot;
+	if (!canPersistShardEntries(targetShardEntries)) {
+		targetShardId = allocateNextShardId(currentShardIds);
+		targetShardTitle = buildShardTitle(title, targetShardId);
+		targetShardEntries = {
+			[commentId]: nextEntry,
+		};
+		targetShardSnapshot = makeMissingPageSnapshot();
+	}
+
+	const nextShardIds = targetShardId === workingShardId
+		? currentShardIds.slice()
+		: [...currentShardIds, targetShardId];
+	const nextShardMap = {
+		...(shardedBasePage.payload.shardMap ?? {}),
+		[commentId]: targetShardId,
+	};
+	const basePayload = buildShardIndexPayload(nextShardIds, nextShardMap);
+	if (wrappedPayloadSize(basePayload) > DATABASE_PAGE_SOFT_LIMIT_BYTES) {
+		return {
+			kind: "save",
+			entry: nextEntry,
+			saveResult: {
+				ok: false,
+				errorCode: "database_shard_index_too_large",
+				errorInfo: "Shard index exceeded page size limit.",
+			},
+		};
+	}
+
+	const baseSave = await saveReactionDatabasePage(title, basePayload, options.summary, {
+		notifySuccess: false,
+		notifyFailure: false,
+		snapshot: shardedBasePage.snapshot,
+	});
+	if (!baseSave.ok) {
+		return {
+			kind: "save",
+			entry: nextEntry,
+			saveResult: baseSave,
+		};
+	}
+
+	const shardSave = await saveReactionDatabasePage(
+		targetShardTitle,
+		{
+			version: SUPPORTED_SCHEMA_VERSION,
+			entries: targetShardEntries,
+		},
+		options.summary,
+		{
+			notifySuccess: options.notifySuccess ?? false,
+			notifyFailure: false,
+			snapshot: targetShardSnapshot,
+		},
+	);
+	return {
+		kind: "save",
+		entry: nextEntry,
+		saveResult: shardSave,
+	};
 }
 
 /**
@@ -1389,18 +1654,88 @@ async function updateCommentEntry(
 		};
 	}
 
-	return enqueuePageTask(title, async () => {
+	const queueKeys = await resolveWriteQueueKeys(title, commentId);
+	return enqueuePageTask(queueKeys, async () => {
 		for (let attempt = 0; attempt < 3; attempt++) {
-			const combined = await loadCombinedEntries(title, { fresh: true });
-			if (!combined.ok) {
+			const basePage = await loadReactionDatabasePage(title, { fresh: true });
+			if (!basePage.ok) {
 				return {
 					ok: false,
 					title,
 					entry: null,
 					readOnly: true,
-					reason: combined.reason,
+					reason: basePage.reason,
 				};
 			}
+
+			if (isShardedPayload(basePage.payload)) {
+				const shardedAttempt = await persistShardedMutationAttempt(title, commentId, updater, basePage, options);
+				if (shardedAttempt.kind === "load_failure") {
+					return {
+						ok: false,
+						title,
+						entry: null,
+						readOnly: true,
+						reason: shardedAttempt.reason,
+					};
+				}
+				if (shardedAttempt.kind === "no_change") {
+					return {
+						ok: false,
+						title,
+						entry: shardedAttempt.entry,
+						readOnly: isReactionDatabaseReadOnlyTitle(title),
+						reason: shardedAttempt.reason ?? "no_changes",
+					};
+				}
+
+				if (shardedAttempt.saveResult.ok) {
+					return {
+						ok: true,
+						title,
+						entry: shardedAttempt.entry,
+						readOnly: false,
+					};
+				}
+
+				invalidateCacheForBase(title);
+
+				if (
+					shardedAttempt.saveResult.errorCode
+					&& REACTION_WRITE_CONFLICT_SAVE_CODES.has(shardedAttempt.saveResult.errorCode)
+					&& attempt < 2
+				) {
+					const backoff = 150 * (2 ** attempt) + Math.floor(Math.random() * 120);
+					await delay(backoff);
+					continue;
+				}
+				if (isReadOnlySaveError(shardedAttempt.saveResult)) {
+					markReadOnly(title, shardedAttempt.saveResult.errorCode ?? "database_write_readonly");
+					return {
+						ok: false,
+						title,
+						entry: null,
+						readOnly: true,
+						reason: shardedAttempt.saveResult.errorCode ?? "database_write_readonly",
+					};
+				}
+				return {
+					ok: false,
+					title,
+					entry: null,
+					readOnly: false,
+					reason: shardedAttempt.saveResult.errorCode ?? "database_write_failed",
+				};
+			}
+
+			const combined: CombinedEntriesLoadSuccess = {
+				ok: true,
+				title,
+				entries: cloneEntries(basePage.payload.entries),
+				pageSnapshots: {
+					[title]: basePage.snapshot,
+				},
+			};
 
 			const currentEntry = combined.entries[commentId] ?? {};
 			const updated = updater(currentEntry);

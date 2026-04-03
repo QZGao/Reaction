@@ -85,7 +85,7 @@ describe("reactionData/store", () => {
 		expect(result.payload.entries).toEqual({});
 	});
 
-	it("mutates and saves a sharded comment entry with syntaxhighlight wrapper", async () => {
+	it("mutates an existing sharded comment by saving only the mapped shard", async () => {
 		const largeEntry = {
 			"👍": Array.from({ length: 2600 }, (_, index) => ({
 				user: `User_${index}`,
@@ -117,6 +117,12 @@ describe("reactionData/store", () => {
 			})
 			.mockResolvedValueOnce({
 				exists: true,
+				text: `<syntaxhighlight lang="json">\n${JSON.stringify(basePayload, null, 2)}\n</syntaxhighlight>`,
+				revisionId: 1,
+				revisionTimestamp: "2026-02-11T00:00:00Z",
+			})
+			.mockResolvedValueOnce({
+				exists: true,
 				text: `<syntaxhighlight lang="json">\n${JSON.stringify(shardPayload, null, 2)}\n</syntaxhighlight>`,
 				revisionId: 2,
 				revisionTimestamp: "2026-02-11T00:01:00Z",
@@ -135,12 +141,85 @@ describe("reactionData/store", () => {
 			notifyFailure: false,
 		});
 		expect(result.ok).toBe(true);
-		expect(savePageWikitextMock).toHaveBeenCalledTimes(2);
+		expect(savePageWikitextMock).toHaveBeenCalledTimes(1);
 		const savedTitles = savePageWikitextMock.mock.calls.map((call) => String(call[0]));
 		expect(savedTitles.some((title) => title.endsWith("/part-1"))).toBe(true);
-		expect(savedTitles.some((title) => title.endsWith("/202602"))).toBe(true);
+		expect(savedTitles.some((title) => title.endsWith("/202602"))).toBe(false);
 		const savedText = String(savePageWikitextMock.mock.calls[0]?.[1] ?? "");
 		expect(savedText).toContain("<syntaxhighlight lang=\"json\">");
+	});
+
+	it("adds a new comment to sharded storage by saving only the target shard and base index", async () => {
+		const basePayload = {
+			version: 1,
+			entries: {},
+			sharded: true,
+			shards: ["part-1", "part-2"],
+			shardMap: {
+				"c-OtherUser-20260201000000-topic": "part-1",
+				"c-LastUser-20260202000000-topic": "part-2",
+			},
+		};
+		const shard1Payload = {
+			version: 1,
+			entries: {
+				"c-OtherUser-20260201000000-topic": {
+					"👍": [{ user: "Alpha", timestampIso: "2026-02-01T00:00:00Z" }],
+				},
+			},
+		};
+		const shard2Payload = {
+			version: 1,
+			entries: {
+				"c-LastUser-20260202000000-topic": {
+					"👍": [{ user: "Beta", timestampIso: "2026-02-02T00:00:00Z" }],
+				},
+			},
+		};
+		fetchPageWikitextSnapshotMock
+			.mockResolvedValueOnce({
+				exists: true,
+				text: `<syntaxhighlight lang="json">\n${JSON.stringify(basePayload, null, 2)}\n</syntaxhighlight>`,
+				revisionId: 1,
+				revisionTimestamp: "2026-02-11T00:00:00Z",
+			})
+			.mockResolvedValueOnce({
+				exists: true,
+				text: `<syntaxhighlight lang="json">\n${JSON.stringify(basePayload, null, 2)}\n</syntaxhighlight>`,
+				revisionId: 1,
+				revisionTimestamp: "2026-02-11T00:00:00Z",
+			})
+			.mockResolvedValueOnce({
+				exists: true,
+				text: `<syntaxhighlight lang="json">\n${JSON.stringify(shard2Payload, null, 2)}\n</syntaxhighlight>`,
+				revisionId: 3,
+				revisionTimestamp: "2026-02-11T00:02:00Z",
+			});
+		savePageWikitextMock.mockResolvedValue({ ok: true });
+
+		const { mutateReactionEntryForComment } = await import("../../src/reactionData/store");
+		const result = await mutateReactionEntryForComment({
+			commentId: "c-NewUser-20260211013500-topic",
+			action: "append",
+			icon: "🎉",
+			user: "Gamma",
+			timestamp: "10:03, 1 January 2026 (UTC)",
+			timestampIso: "2026-01-01T10:03:00Z",
+			notifySuccess: false,
+			notifyFailure: false,
+		});
+
+		expect(result.ok).toBe(true);
+		expect(savePageWikitextMock).toHaveBeenCalledTimes(2);
+		const savedTitles = savePageWikitextMock.mock.calls.map((call) => String(call[0]));
+		expect(savedTitles).toContain("Wikipedia:Reactions/data/NewUser/202602");
+		expect(savedTitles).toContain("Wikipedia:Reactions/data/NewUser/202602/part-2");
+		expect(savedTitles).not.toContain("Wikipedia:Reactions/data/NewUser/202602/part-1");
+		const baseSaveOptions = savePageWikitextMock.mock.calls.find((call) => String(call[0]).endsWith("/202602"))?.[3];
+		expect(baseSaveOptions).toMatchObject({
+			baseTimestamp: "2026-02-11T00:00:00Z",
+			createOnly: false,
+		});
 	});
 
 	it("retries edit-conflict writes with a refreshed base timestamp", async () => {
@@ -152,6 +231,12 @@ describe("reactionData/store", () => {
 			entries: {},
 		};
 		fetchPageWikitextSnapshotMock
+			.mockResolvedValueOnce({
+				exists: true,
+				text: `<syntaxhighlight lang="json">\n${JSON.stringify(emptyPayload, null, 2)}\n</syntaxhighlight>`,
+				revisionId: 1,
+				revisionTimestamp: revisionTs1,
+			})
 			.mockResolvedValueOnce({
 				exists: true,
 				text: `<syntaxhighlight lang="json">\n${JSON.stringify(emptyPayload, null, 2)}\n</syntaxhighlight>`,
