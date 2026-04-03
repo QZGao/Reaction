@@ -218,6 +218,7 @@ async function runLegacyInlineMigration(): Promise<void> {
 			notifySuccess: false,
 			notifyFailure: false,
 			appendBacklink: true,
+			baseTimestamp: sourceSnapshot.revisionTimestamp,
 		},
 	);
 	if (!sourceSave.ok) {

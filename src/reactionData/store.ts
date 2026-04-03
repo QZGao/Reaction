@@ -1,6 +1,7 @@
 import {
 	fetchPageWikitextSnapshot,
 	savePageWikitext,
+	type PageWikitextSnapshot,
 	type SavePageWikitextResult,
 } from "../api/client";
 import { normalizeTitle, parseSignatureTimestampText } from "../utils";
@@ -23,6 +24,10 @@ const REACTION_READ_ONLY_SAVE_CODES = new Set([
 	"permissiondenied",
 	"abusefilter-disallowed",
 ]);
+const REACTION_WRITE_CONFLICT_SAVE_CODES = new Set([
+	"editconflict",
+	"articleexists",
+]);
 
 const RECOVER_AS_EMPTY_PARSE_REASONS = new Set([
 	"database_wrapper_invalid",
@@ -35,6 +40,7 @@ type ReactionRecordMap = Record<string, ReactionParticipantRecord>;
 interface CachedDatabasePage {
 	payload: ReactionDatabasePayload;
 	fetchedAt: number;
+	snapshot: PageWikitextSnapshot;
 }
 
 interface DatabasePageParseFailure {
@@ -55,6 +61,7 @@ interface CombinedEntriesLoadSuccess {
 	ok: true;
 	title: string;
 	entries: Record<string, ReactionEntry>;
+	pageSnapshots: Record<string, PageWikitextSnapshot>;
 }
 
 interface CombinedEntriesLoadFailure {
@@ -121,7 +128,7 @@ const readOnlyReasons = new Map<string, string>();
 const malformedCommentIds = new Set<string>();
 
 type ReactionDatabasePageResult =
-	| { ok: true; title: string; payload: ReactionDatabasePayload; fromCache: boolean }
+	| { ok: true; title: string; payload: ReactionDatabasePayload; fromCache: boolean; snapshot: PageWikitextSnapshot }
 	| { ok: false; title: string; reason: string; readOnly: true };
 
 interface UpdateEntryResult {
@@ -837,6 +844,7 @@ export async function loadReactionDatabasePage(
 			title,
 			payload: cached.payload,
 			fromCache: true,
+			snapshot: cached.snapshot,
 		};
 	}
 
@@ -850,13 +858,14 @@ export async function loadReactionDatabasePage(
 			const snapshot = await fetchPageWikitextSnapshot(title);
 			if (!snapshot.exists || snapshot.text === null) {
 				const payload = makeEmptyPayload();
-				databaseCache.set(title, { payload, fetchedAt: Date.now() });
+				databaseCache.set(title, { payload, fetchedAt: Date.now(), snapshot });
 				clearReadOnly(title);
 				return {
 					ok: true,
 					title,
 					payload,
 					fromCache: false,
+					snapshot,
 				};
 			}
 			const parsed = parseDatabasePageText(snapshot.text);
@@ -868,13 +877,14 @@ export async function loadReactionDatabasePage(
 						parsed.reason,
 					);
 					const payload = makeEmptyPayload();
-					databaseCache.set(title, { payload, fetchedAt: Date.now() });
+					databaseCache.set(title, { payload, fetchedAt: Date.now(), snapshot });
 					clearReadOnly(title);
 					return {
 						ok: true,
 						title,
 						payload,
 						fromCache: false,
+						snapshot,
 					};
 				}
 				markReadOnly(title, parsed.reason);
@@ -886,13 +896,14 @@ export async function loadReactionDatabasePage(
 				};
 			}
 			const payload = parsed.payload;
-			databaseCache.set(title, { payload, fetchedAt: Date.now() });
+			databaseCache.set(title, { payload, fetchedAt: Date.now(), snapshot });
 			clearReadOnly(title);
 			return {
 				ok: true,
 				title,
 				payload,
 				fromCache: false,
+				snapshot,
 			};
 		} catch (error) {
 			console.error("[Reaction] Failed to load reaction database page.", title, error);
@@ -941,6 +952,9 @@ async function loadCombinedEntries(
 			ok: true,
 			title,
 			entries: cloneEntries(basePage.payload.entries),
+			pageSnapshots: {
+				[title]: basePage.snapshot,
+			},
 		};
 	}
 
@@ -950,6 +964,7 @@ async function loadCombinedEntries(
 			const shardTitle = buildShardTitle(title, shardId);
 			const shardPage = await loadReactionDatabasePage(shardTitle, options);
 			return {
+				shardTitle,
 				shardPage,
 			};
 		}),
@@ -966,6 +981,9 @@ async function loadCombinedEntries(
 	}
 
 	const combinedEntries: Record<string, ReactionEntry> = {};
+	const pageSnapshots: Record<string, PageWikitextSnapshot> = {
+		[title]: basePage.snapshot,
+	};
 	for (const [commentId, entry] of Object.entries(basePage.payload.entries)) {
 		combinedEntries[commentId] = canonicalizeReactionEntry(entry);
 	}
@@ -973,6 +991,7 @@ async function loadCombinedEntries(
 		if (!load.shardPage.ok) {
 			continue;
 		}
+		pageSnapshots[load.shardTitle] = load.shardPage.snapshot;
 		for (const [commentId, entry] of Object.entries(load.shardPage.payload.entries)) {
 			const existing = combinedEntries[commentId];
 			if (existing) {
@@ -990,6 +1009,7 @@ async function loadCombinedEntries(
 			version: SUPPORTED_SCHEMA_VERSION,
 			entries: combinedEntries,
 		}).entries,
+		pageSnapshots,
 	};
 }
 
@@ -1080,7 +1100,11 @@ export async function saveReactionDatabasePage(
 	title: string,
 	payload: ReactionDatabasePayload,
 	summary: string,
-	options?: { notifySuccess?: boolean; notifyFailure?: boolean },
+	options?: {
+		notifySuccess?: boolean;
+		notifyFailure?: boolean;
+		snapshot?: PageWikitextSnapshot;
+	},
 ): Promise<SavePageWikitextResult> {
 	const canonicalPayload = canonicalizeDatabasePayload(payload);
 	const wrapped = wrapJsonPayloadForDatabasePage(serializePayloadJson(canonicalPayload));
@@ -1088,11 +1112,19 @@ export async function saveReactionDatabasePage(
 		notifySuccess: options?.notifySuccess ?? false,
 		notifyFailure: options?.notifyFailure ?? true,
 		appendBacklink: true,
+		baseTimestamp: options?.snapshot?.revisionTimestamp ?? null,
+		createOnly: options?.snapshot ? !options.snapshot.exists : false,
 	});
 	if (result.ok) {
 		databaseCache.set(title, {
 			payload: canonicalPayload,
 			fetchedAt: Date.now(),
+			snapshot: {
+				exists: true,
+				text: wrapped,
+				revisionId: null,
+				revisionTimestamp: null,
+			},
 		});
 		clearReadOnly(title);
 	} else {
@@ -1113,13 +1145,21 @@ async function persistAsSinglePage(
 	title: string,
 	entries: Record<string, ReactionEntry>,
 	summary: string,
-	options?: { notifySuccess?: boolean; notifyFailure?: boolean },
+	options?: {
+		notifySuccess?: boolean;
+		notifyFailure?: boolean;
+		pageSnapshots?: Record<string, PageWikitextSnapshot>;
+	},
 ): Promise<SavePageWikitextResult> {
 	const payload: ReactionDatabasePayload = {
 		version: SUPPORTED_SCHEMA_VERSION,
 		entries,
 	};
-	return saveReactionDatabasePage(title, payload, summary, options);
+	return saveReactionDatabasePage(title, payload, summary, {
+		notifySuccess: options?.notifySuccess,
+		notifyFailure: options?.notifyFailure,
+		snapshot: options?.pageSnapshots?.[title],
+	});
 }
 
 /**
@@ -1134,7 +1174,11 @@ async function persistAsShardedPages(
 	title: string,
 	layout: ShardLayout,
 	summary: string,
-	options?: { notifySuccess?: boolean; notifyFailure?: boolean },
+	options?: {
+		notifySuccess?: boolean;
+		notifyFailure?: boolean;
+		pageSnapshots?: Record<string, PageWikitextSnapshot>;
+	},
 ): Promise<SavePageWikitextResult> {
 	for (const shard of layout.shardEntries) {
 		const shardTitle = buildShardTitle(title, shard.shardId);
@@ -1148,6 +1192,7 @@ async function persistAsShardedPages(
 			{
 				notifySuccess: false,
 				notifyFailure: false,
+				snapshot: options?.pageSnapshots?.[shardTitle],
 			},
 		);
 		if (!shardSave.ok) {
@@ -1162,7 +1207,11 @@ async function persistAsShardedPages(
 		shards: layout.shardEntries.map((shard) => shard.shardId),
 		shardMap: layout.shardMap,
 	};
-	const baseSave = await saveReactionDatabasePage(title, basePayload, summary, options);
+	const baseSave = await saveReactionDatabasePage(title, basePayload, summary, {
+		notifySuccess: options?.notifySuccess,
+		notifyFailure: options?.notifyFailure,
+		snapshot: options?.pageSnapshots?.[title],
+	});
 	if (!baseSave.ok) {
 		invalidateCacheForBase(title);
 	}
@@ -1181,7 +1230,11 @@ async function persistCombinedEntries(
 	title: string,
 	entries: Record<string, ReactionEntry>,
 	summary: string,
-	options?: { notifySuccess?: boolean; notifyFailure?: boolean },
+	options?: {
+		notifySuccess?: boolean;
+		notifyFailure?: boolean;
+		pageSnapshots?: Record<string, PageWikitextSnapshot>;
+	},
 ): Promise<SavePageWikitextResult> {
 	const canonicalEntries = canonicalizeDatabasePayload({
 		version: SUPPORTED_SCHEMA_VERSION,
@@ -1369,7 +1422,8 @@ async function updateCommentEntry(
 
 			const saveResult = await persistCombinedEntries(title, nextEntries, options.summary, {
 				notifySuccess: options.notifySuccess,
-				notifyFailure: options.notifyFailure,
+				notifyFailure: false,
+				pageSnapshots: combined.pageSnapshots,
 			});
 			if (saveResult.ok) {
 				return {
@@ -1382,7 +1436,7 @@ async function updateCommentEntry(
 
 			invalidateCacheForBase(title);
 
-			if (saveResult.errorCode === "editconflict" && attempt < 2) {
+			if (saveResult.errorCode && REACTION_WRITE_CONFLICT_SAVE_CODES.has(saveResult.errorCode) && attempt < 2) {
 				const backoff = 150 * (2 ** attempt) + Math.floor(Math.random() * 120);
 				await delay(backoff);
 				continue;

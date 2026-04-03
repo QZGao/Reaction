@@ -19,6 +19,7 @@ vi.mock("../../src/utils", () => ({
 describe("reactionData/store", () => {
 	beforeEach(() => {
 		vi.resetModules();
+		vi.useRealTimers();
 		fetchPageWikitextSnapshotMock.mockReset();
 		savePageWikitextMock.mockReset();
 		(globalThis as { mw?: unknown }).mw = {
@@ -140,5 +141,58 @@ describe("reactionData/store", () => {
 		expect(savedTitles.some((title) => title.endsWith("/202602"))).toBe(true);
 		const savedText = String(savePageWikitextMock.mock.calls[0]?.[1] ?? "");
 		expect(savedText).toContain("<syntaxhighlight lang=\"json\">");
+	});
+
+	it("retries edit-conflict writes with a refreshed base timestamp", async () => {
+		vi.useFakeTimers();
+		const revisionTs1 = "2026-02-11T00:00:00Z";
+		const revisionTs2 = "2026-02-11T00:01:00Z";
+		const emptyPayload = {
+			version: 1,
+			entries: {},
+		};
+		fetchPageWikitextSnapshotMock
+			.mockResolvedValueOnce({
+				exists: true,
+				text: `<syntaxhighlight lang="json">\n${JSON.stringify(emptyPayload, null, 2)}\n</syntaxhighlight>`,
+				revisionId: 1,
+				revisionTimestamp: revisionTs1,
+			})
+			.mockResolvedValueOnce({
+				exists: true,
+				text: `<syntaxhighlight lang="json">\n${JSON.stringify(emptyPayload, null, 2)}\n</syntaxhighlight>`,
+				revisionId: 2,
+				revisionTimestamp: revisionTs2,
+			});
+		savePageWikitextMock
+			.mockResolvedValueOnce({ ok: false, errorCode: "editconflict" })
+			.mockResolvedValueOnce({ ok: true });
+
+		const { mutateReactionEntryForComment } = await import("../../src/reactionData/store");
+		const mutationPromise = mutateReactionEntryForComment({
+			commentId: "c-TestUser-20260211013500-topic",
+			action: "append",
+			icon: "👍",
+			user: "Another User",
+			timestamp: "10:02, 1 January 2026 (UTC)",
+			timestampIso: "2026-01-01T10:02:00Z",
+			notifySuccess: false,
+			notifyFailure: false,
+		});
+
+		await vi.advanceTimersByTimeAsync(500);
+		const result = await mutationPromise;
+		vi.useRealTimers();
+
+		expect(result.ok).toBe(true);
+		expect(savePageWikitextMock).toHaveBeenCalledTimes(2);
+		expect(savePageWikitextMock.mock.calls[0]?.[3]).toMatchObject({
+			baseTimestamp: revisionTs1,
+			createOnly: false,
+		});
+		expect(savePageWikitextMock.mock.calls[1]?.[3]).toMatchObject({
+			baseTimestamp: revisionTs2,
+			createOnly: false,
+		});
 	});
 });
