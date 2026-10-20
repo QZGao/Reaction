@@ -50,6 +50,10 @@ async function shouldSkipPage(): Promise<boolean> {
 	if (skipCache !== null) {
 		return skipCache;
 	}
+	if (document.getElementById("template-noreaction")) {
+		skipCache = true;
+		return skipCache;
+	}
 	const pageName = mw.config.get("wgPageName");
 	if (PAGE_NAME_WHITELIST.includes(pageName)) {
 		skipCache = false;
